@@ -1,0 +1,50 @@
+
+### PYTHON / DJANGO FILES ###
+
+# compiled Python bytecode (.pyc), auto generates everytime code is run
+__pycache__/ 
+
+# temp compiled versions of .py files, not source code
+*.py[cod]
+
+# local SQLite database - stores data, changes constantly, differs per dev
+*.sqlite3
+db.sqlite3
+
+# virtual environment folder that holds installed Python packages
+.venv/
+
+### NODE / REACT FILES ###
+
+# all npm packages for React app, should be installed locally
+frontend/node_modules/
+
+# build output, not source
+frontend/dist/
+
+# temp debug/runtime info, not code
+*.log
+
+### EDITOR / VS CODE SETTINGS ###
+
+# personal vscode settings
+.vscode/
+
+### OS FILES ###
+
+# macOS Finder metadata
+.DS_Store
+
+# Windows thumbnail cache
+Thumbs.db
+
+### MISCELLANEOUS ###
+
+# environment variable file
+.env
+
+# editor backup files
+*.backup
+
+# temp swap files
+*.swp
