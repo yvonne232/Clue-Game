@@ -1,0 +1,6 @@
+# Core framework
+Django==4.2.25
+
+# WebSocket support for Django (ASGI-compatible)
+channels==4.1.0
+daphne==4.1.2
