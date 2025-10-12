@@ -41,11 +41,11 @@ pip install -r requirements.txt
 Propagates changes made to models into database schema
 Source: https://www.geeksforgeeks.org/python/django-manage-py-migrate-command-python/
 ```bash
-python backend/backend/manage.py migrate
+python backend/manage.py migrate
 ```
 
 ### 4. Run ASGI server
-
+Run this command within the backend/ folder
 ```bash
 daphne -b 0.0.0.0 -p 8000 backend.asgi:application
 ```
