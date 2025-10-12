@@ -15,11 +15,12 @@ import realtime.routing  # Import WebSocket routes
 
 os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
 
+
 # Default Django ASGI app (normal HTTP)
-django_app = get_asgi_application()
+django_asgi_app = get_asgi_application()
 
 application = ProtocolTypeRouter({
-    "http": django_app,  # regular HTTP requests go here
+    "http": django_asgi_app,  # regular HTTP requests go here
     "websocket": AuthMiddlewareStack(  # WebSockets go through this middleware
         URLRouter(realtime.routing.websocket_urlpatterns)  # connect WS routes
     ),

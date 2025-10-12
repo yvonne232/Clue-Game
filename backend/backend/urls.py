@@ -16,7 +16,10 @@ Including another URLconf
 """
 from django.contrib import admin
 from django.urls import path
+from realtime.views import hello_world, broadcast_message
 
 urlpatterns = [
     path("admin/", admin.site.urls),
+    path('api/hello/', hello_world),
+    path('api/broadcast/', broadcast_message),
 ]

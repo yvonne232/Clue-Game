@@ -41,6 +41,7 @@ CHANNEL_LAYERS = {
 # Application definition
 
 INSTALLED_APPS = [
+    "channels",  # Django Chennels for WebsSockets/ASGI
     "django.contrib.admin",
     "django.contrib.auth",
     "django.contrib.contenttypes",
@@ -48,7 +49,6 @@ INSTALLED_APPS = [
     "django.contrib.messages",
     "django.contrib.staticfiles",
     "realtime",     # app that contains Websocket consumer
-    "channels",     # Django Chennels for WebsSockets/ASGI
     'rest_framework',
     "corsheaders"
 
@@ -83,7 +83,6 @@ TEMPLATES = [
     },
 ]
 
-WSGI_APPLICATION = "backend.wsgi.application"
 
 
 # Database
