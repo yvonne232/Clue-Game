@@ -16,7 +16,10 @@ So far, this increment includes:
   - `backend/settings.py` → enabled `channels` and added an in-memory channel layer
   - `backend/asgi.py` → made the backend ASGI- and WebSocket-capable
 
-No frontend or game logic has been implemented yet.
+Frontend:
+- React frontend
+- Modified:
+  - `frontend/src/App.jsx` → enables the communication between backend and frontend via websockets, also defines webpage contents
 
 
 ## Backend Setup Instructions
@@ -31,7 +34,7 @@ source .venv/bin/activate
 .venv\Scripts\Activate.ps1
 ```
 
-### 2. Insall Dependencies
+### 2. Install Dependencies
 
 ```bash
 pip install -r requirements.txt
@@ -47,6 +50,27 @@ python backend/manage.py migrate
 ### 4. Run ASGI server
 Run this command within the backend/ folder
 ```bash
-daphne -b 0.0.0.0 -p 8000 backend.asgi:application
+daphne backend.asgi:application
 ```
 Starts the Django + Channels server on port 8000
+
+## Backend Setup Instructions
+
+### 1. Go the the frontend (from the home directory)
+
+```bash
+cd frontend/
+```
+
+### 2. Install npm (one-time)
+
+```bash
+npm install
+```
+You may also need to update Node.js to its latest version before proceeding
+
+### 3. Start the server
+
+```bash
+npm run dev
+```

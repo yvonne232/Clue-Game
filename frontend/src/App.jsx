@@ -8,6 +8,7 @@ function App() {
   const [apiMsg, setApiMsg] = useState("");
   const [wsMsg, setWsMsg] = useState("");
   const [socket, setSocket] = useState(null);
+  const [playerMsg, setPlayerMsg] = useState("");
 
   // Connect to WebSocket
   useEffect(() => {
@@ -41,6 +42,13 @@ function App() {
     setApiMsg(data.message);
   };
 
+  // Test New App Player
+  const getPlayerInfo = async () => {
+    const res = await fetch("http://127.0.0.1:8000/player/");
+    const data = await res.json();
+    setPlayerMsg(data.message);
+  }
+
   return (
     <>
       <div>
@@ -52,6 +60,9 @@ function App() {
         <button onClick={sendWsMessage}>Send WebSocket Message</button>
         <button onClick={triggerBroadcast}>Broadcast from Django</button>
         <p>WebSocket → {wsMsg}</p>
+
+        <button onClick={getPlayerInfo}>Get Player Info</button>
+        <p>Player → {playerMsg}</p>
       </div>
       
         
