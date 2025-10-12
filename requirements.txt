@@ -10,3 +10,4 @@ rest_framework==3.16.1
 
 # cors cross origin
 django-cors-headers==4.9.0
+

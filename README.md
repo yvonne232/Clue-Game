@@ -37,10 +37,11 @@ source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### 3. Apply databse migrations
-
+### 3. Apply database migrations
+Propagates changes made to models into database schema
+Source: https://www.geeksforgeeks.org/python/django-manage-py-migrate-command-python/
 ```bash
-python backend/manage.py migrate
+python backend/backend/manage.py migrate
 ```
 
 ### 4. Run ASGI server
