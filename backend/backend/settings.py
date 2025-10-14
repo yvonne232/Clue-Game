@@ -50,8 +50,8 @@ INSTALLED_APPS = [
     "django.contrib.staticfiles",
     "realtime",     # app that contains Websocket consumer
     'rest_framework',
-    "corsheaders"
-
+    "corsheaders",
+    "player.apps.PlayerConfig",  # player app
 ]
 
 MIDDLEWARE = [
