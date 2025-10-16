@@ -44,20 +44,22 @@ connection_tracker = PlayerTracker()
 class GameConsumer(JsonWebsocketConsumer):
     def connect(self):
         self.accept()
-        # Store the connection with a temporary ID
-        connection_tracker.add_connection(self.channel_name, None)
-        
+        # Add to game room group
+        async_to_sync(self.channel_layer.group_add)(
+            "game_room",
+            self.channel_name
+        )
+
     def disconnect(self, close_code):
-        # Clean up when client disconnects
-        connection_tracker.remove_connection(self.channel_name)
-        
-    def receive_json(self, content):
-        # Handle incoming messages
-        if 'player_id' in content:
-            # Update player ID when client identifies themselves
-            connection_tracker.add_connection(self.channel_name, content['player_id'])
-            
-        # You can broadcast to specific clients using their channel_name
+        # Remove from game room group
+        async_to_sync(self.channel_layer.group_discard)(
+            "game_room",
+            self.channel_name
+        )
+
+    def broadcast_players(self, event):
+        # Send player list to WebSocket
         self.send_json({
-            'message': f'Received message from player {content.get("player_id")}'
+            "type": "player_list",
+            "players": event["players"]
         })

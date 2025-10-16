@@ -36,7 +36,10 @@ function App() {
     ws.onmessage = (e) => {
         const data = JSON.parse(e.data);
         console.log("Received from server:", data);
-        if (data.message) setWsMsg(data.message);
+        if (data.type) setWsMsg(data.type);
+        if (data.type === 'player_list') {
+          setAllPlayers(data.players);
+      }
     };
     
     setSocket(ws);
@@ -83,16 +86,20 @@ function App() {
 
   const getAllPlayers = async () => {
     try {
-      const res = await fetch("http://127.0.0.1:8000/get_all_players/");
-      if (!res.ok) {
-          throw new Error(`HTTP error! Status: ${res.status}`);
-      }
-      const data = await res.json();
-      console.log("All players:", data.players);
-      setAllPlayers(data.players);
-    }
-    catch (error) {
-      console.error("Error fetching all players:", error);
+        const res = await fetch("http://127.0.0.1:8000/get_all_players/", {
+            method: 'POST',  // Changed to POST to trigger broadcast
+            headers: {
+                'Content-Type': 'application/json',
+                'Accept': 'application/json',
+                'Origin': 'http://localhost:5173'
+            },
+            credentials: 'include'  // This is important for CORS
+        });
+        if (!res.ok) {
+            throw new Error(`HTTP error! Status: ${res.status}`);
+        }
+    } catch (error) {
+        console.error("Error triggering player list broadcast:", error);
     }
   };
 
