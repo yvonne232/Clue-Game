@@ -10,6 +10,7 @@ function App() {
   const [socket, setSocket] = useState(null);
   // const [playerMsg, setPlayerMsg] = useState("");
   const [player, setPlayer] = useState("");
+  const [allPlayers, setAllPlayers] = useState([]);
 
   // Connect to WebSocket
   useEffect(() => {
@@ -19,12 +20,13 @@ function App() {
         try {
             const res = await fetch("http://127.0.0.1:8000/player/");
             const data = await res.json();
+            console.log("Fetched player:", data.player);
             // Store player ID in localStorage
-            localStorage.setItem('player_name', data.player);
+            localStorage.setItem('player', data.player);
             setPlayer(data.player);
             // Send player ID to WebSocket
             ws.send(JSON.stringify({
-                player_name: data.player
+                player_id: data.player
             }));
         } catch (error) {
             console.error("Error fetching player:", error);
@@ -59,12 +61,40 @@ function App() {
   };
 
   // Test New App Player
-  // const getPlayerInfo = async () => {
-  //   const res = await fetch("http://127.0.0.1:8000/player/");
-  //   const data = await res.json();
-  //   setPlayerMsg(data.player);
+  const getPlayerInfo = async () => {
+    const playerId = localStorage.getItem('player');
+    if (!playerId) {
+        console.error("No player name found");
+        return;
+    }
 
-  // }
+    try {
+      const res = await fetch(`http://127.0.0.1:8000/${playerId}/`);
+      if (!res.ok) {
+          throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      const data = await res.json();
+      console.log("Player info:", data);
+      setPlayer(data.player);
+    } catch (error) {
+      console.error("Error fetching player info:", error);
+    }
+  };
+
+  const getAllPlayers = async () => {
+    try {
+      const res = await fetch("http://127.0.0.1:8000/get_all_players/");
+      if (!res.ok) {
+          throw new Error(`HTTP error! Status: ${res.status}`);
+      }
+      const data = await res.json();
+      console.log("All players:", data.players);
+      setAllPlayers(data.players);
+    }
+    catch (error) {
+      console.error("Error fetching all players:", error);
+    }
+  };
 
   return (
     <>
@@ -79,6 +109,13 @@ function App() {
         <p>WebSocket → {wsMsg}</p>
 
         <p>Player → {player}</p>
+        <button onClick={getPlayerInfo}>Player Info</button>
+        <button onClick={getAllPlayers}>Get All Players</button>
+        <ul>
+          {allPlayers.map((p, index) => (
+            <li key={index}>{p}</li>
+          ))}
+        </ul>
 
         <button>Sample test button</button>
       </div>
