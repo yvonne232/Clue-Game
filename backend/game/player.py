@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from typing import ClassVar, Dict, List, Optional
 from .cards import Card             # each player has hand containing Card objects
 from .enums import CardKind         # identifies type of each card
-#from .suggestion import Suggestion
+from .suggestion import Suggestion
 #from .board import Location
 
 @dataclass
@@ -18,7 +18,7 @@ class Player:
     character: Optional[str] = None         # chosen character/suspect 
     position: Optional[str] = None          # current board location (Room or Hallway)
     hand: List[Card] = field(default_factory = list)    # list of Card objects dealt to this player
-    isLost: bool = False                    # whether player has lost by incorrect accusation
+    is_lost: bool = False                    # whether player has lost by incorrect accusation
 
     lookup: ClassVar[Dict[str, "Player"]] = {}          # static map for player ID lookups
 
@@ -35,9 +35,9 @@ class Player:
         
         # iterate through player's hand, compare each card to suggestion cards
         for c in self.hand:
-            if (c.kind == CardKind.SUSPECT and c.name == s.suspect) \
-                or (c.kind == CardKind.WEAPON and c.name == s.weapon) \
-                or (c.kind == CardKind.ROOM and c.name == s.room):
+            if (c.kind == s.suspect.kind and c.name == s.suspect.name) \
+                or (c.kind == s.weapon.kind and c.name == s.weapon.name) \
+                or (c.kind == s.room.kind and c.name == s.room.name):
                 matches.append(c)
         return matches
     
@@ -50,10 +50,3 @@ class Player:
             raise KeyError(f"No Player with ID '{player_id}' exists.")
         return cls.lookup[player_id]
     
-class Suggestion:
-    """ temp for testing """
-    def __init__(self, suggester_id: str, suspect: str, weapon: str, room: str):
-        self.suggester_id = suggester_id
-        self.suspect = suspect
-        self.weapon = weapon
-        self.room = room
