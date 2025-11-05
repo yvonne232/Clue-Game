@@ -1,6 +1,6 @@
 
 ### Domain structure rationale
-The “entity classes” from the SDD (Card/Deck, Player, Board, etc) are implemented as plain Python modules inside the `game` app for this minimal increment, not as Django ORM models. These are in-memory domain objects that encode game rules (movement legality, hallway occupancy, dealing, suggestions). This keeps the core logic framework-agnostic, fast to test, and consistent with the SDD focus on server subsystem behavior rather than persistence.
+The “entity classes” from the SDD (Card/Deck, Player, Board, etc) are implemented as plain Python modules inside the `game` app for this minimal increment. These are in-memory domain objects that encode game rules (movement legality, hallway occupancy, dealing, suggestions). This keeps core logic framework-agnostic, fast to test, and consistent with the SDD focus on server subsystem behavior.
 
 ### Minimal Increment Rubric:
 

@@ -26,17 +26,6 @@ class GameState:
     current_player_id: Optional[str] = None     # ID of the player whose turn it is
     pending_suggestion: Optional[Suggestion] = None   # active suggestion being resolved
 
-
-    def add_player(self, player: Player) -> None:
-        """
-        Add a player to the game state.
-        IDs must be unique; raises ValueError on duplicate.
-        """
-        if player.id in self.players:
-            raise ValueError(f"Player with id {player.id} already exists.")
-        self.players[player.id] = player
-
-
     def get_player(self, player_id: str) -> Player:
         """
         Retrieve a player by ID from the game state's player dictionary.

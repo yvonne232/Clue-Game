@@ -7,7 +7,7 @@
 
 from __future__ import annotations
 from dataclasses import dataclass
-from typing import Dict, List, Optional, Sequence, TYPE_CHECKING
+from typing import Dict, List, Optional, TYPE_CHECKING
 from uuid import uuid4
 from .state import GameState
 from .board import build_standard_board
