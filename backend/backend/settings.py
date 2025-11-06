@@ -52,6 +52,7 @@ INSTALLED_APPS = [
     'rest_framework',
     "corsheaders",
     "player.apps.PlayerConfig",  # player app
+    'game'
 ]
 
 MIDDLEWARE = [
