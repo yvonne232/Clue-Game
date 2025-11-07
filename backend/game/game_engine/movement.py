@@ -1,42 +1,51 @@
-"""
-Movement rules for Clue-Less:
-- From a room → any connected hallway (if not occupied)
-- From a hallway → one of its two connected rooms
-- Secret passage moves are allowed between corners
-"""
-from game.models import Room, Hallway, Player
-from .board import BoardLayout
+from game.game_engine.notifier import Notifier
 
-board = BoardLayout()
+class MovementEngine:
+    """
+    Handles movement rules between rooms.
+    """
 
-def can_move(player, destination_room_name):
-    """Check if the player can move to a destination room."""
-    if not player.current_room:
-        return False
+    def __init__(self, board):
+        self.board = board
+        # Track which hallways are occupied: {name: player or None}
+        self.hallway_occupancy = {}
 
-    current_name = player.current_room.name
-    if destination_room_name not in board.get_adjacent_rooms(current_name):
-        return False
+    def is_hallway(self, location):
+        return location.startswith("Hallway between")
 
-    # ensure hallway is not occupied if moving into one
-    try:
-        hallway = Hallway.objects.get(name=destination_room_name)
-        if hallway.is_occupied:
+    def hallway_is_occupied(self, hallway):
+        return self.hallway_occupancy.get(hallway) is not None
+
+    def can_move(self, player, destination):
+        # Prevent hallway→hallway moves
+        if self.is_hallway(player.current_room) and self.is_hallway(destination):
             return False
-    except Hallway.DoesNotExist:
-        pass
 
-    return True
+        # Prevent entering occupied hallway
+        if self.is_hallway(destination) and self.hallway_is_occupied(destination):
+            return False
 
+        # Allow secret passage
+        if destination == self.board.SECRET_PASSAGES.get(player.current_room):
+            return True
 
-def perform_move(player, destination_room_name):
-    """Move the player if valid."""
-    if not can_move(player, destination_room_name):
-        return False
+        # Normal adjacency
+        return destination in self.board.get_adjacent_rooms(player.current_room)
 
-    new_room = Room.objects.filter(name=destination_room_name).first()
-    if new_room:
-        player.current_room = new_room
-        player.save()
+    def move(self, player, destination):
+        if not self.can_move(player, destination):
+            Notifier.broadcast(f"🚫 {player.name} cannot move to {destination} (blocked or invalid).")
+            return False
+
+        # Clear old hallway occupancy
+        if self.is_hallway(player.current_room):
+            self.hallway_occupancy[player.current_room] = None
+
+        # Mark new hallway as occupied
+        if self.is_hallway(destination):
+            self.hallway_occupancy[destination] = player.name
+
+        Notifier.broadcast(f"{player.name} moved from {player.current_room} → {destination}")
+        player.current_room = destination
+        player.moved_by_suggestion = False
         return True
-    return False
