@@ -22,5 +22,6 @@ urlpatterns = [
     path("admin/", admin.site.urls),
     path('api/hello/', hello_world),
     path('api/broadcast/', broadcast_message),
-    path('', include('player.urls')),
+    path('api/', include('player.urls')),
+    path('api/', include('game.urls')),
 ]
