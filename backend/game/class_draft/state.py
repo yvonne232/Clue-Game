@@ -7,7 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, List, Optional, Set, TYPE_CHECKING
 from .board import Board
 from .cards import CaseFile
-from ..suggestion import Suggestion
+from .suggestion import Suggestion
 from .enums import TurnPhase
 
 if TYPE_CHECKING:
