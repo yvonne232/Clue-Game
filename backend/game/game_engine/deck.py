@@ -1,33 +1,67 @@
 import random
+from game.models import Card, Solution
 
-class CardDeck:
-    """
-    Manages shuffling and dealing cards.
-    """
 
-    def __init__(self, characters, weapons, rooms):
-        self.characters = characters
-        self.weapons = weapons
-        self.rooms = rooms
-        self.deck = characters + weapons + rooms
+class Deck:
+    """Handles loading cards, creating the mystery solution, and dealing hands."""
 
+    def __init__(self):
+        """Ensure all cards exist and load them grouped by type."""
+        self.characters = list(Card.objects.filter(card_type="CHAR"))
+        self.weapons = list(Card.objects.filter(card_type="WEAP"))
+        self.rooms = list(Card.objects.filter(card_type="ROOM"))
+
+        if not (self.characters and self.weapons and self.rooms):
+            raise RuntimeError("❌ Missing cards in database — run migrations to create default cards.")
+
+        # Store all cards together for convenience
+        self.all_cards = self.characters + self.weapons + self.rooms
+
+    # ------------------------------------------------------------
+    #  Create or load the mystery solution
+    # ------------------------------------------------------------
     def create_solution(self):
+        """Randomly select one character, weapon, and room for the mystery."""
+        existing = Solution.objects.order_by("-created_at").first()
+        if existing:
+            # reuse the most recent one
+            return {
+                "suspect": existing.character.name,
+                "weapon": existing.weapon.name,
+                "room": existing.room.name,
+            }
+
+        char = random.choice(self.characters)
+        weap = random.choice(self.weapons)
+        room = random.choice(self.rooms)
+
+        sol = Solution.objects.create(character=char, weapon=weap, room=room)
         return {
-            "character": random.choice(self.characters),
-            "weapon": random.choice(self.weapons),
-            "room": random.choice(self.rooms),
+            "suspect": char.name,
+            "weapon": weap.name,
+            "room": room.name,
         }
 
+    # ------------------------------------------------------------
+    # 🃏 Deal cards evenly among players
+    # ------------------------------------------------------------
+    def deal(self, num_players):
+        """Deal remaining (non-solution) cards evenly among players."""
+        latest_solution = Solution.objects.order_by("-created_at").first()
 
-    def deal(self, players):
-        """Deal cards evenly to players."""
-        cards = self.characters + self.weapons + self.rooms
-        random.shuffle(cards)
+        cards_to_deal = self.all_cards.copy()
+        if latest_solution:
+            cards_to_deal = [
+                c for c in cards_to_deal
+                if c.id not in {
+                    latest_solution.character.id,
+                    latest_solution.weapon.id,
+                    latest_solution.room.id,
+                }
+            ]
 
-        # remove solution cards
-        hands = {p: [] for p in players}
-        while cards:
-            for p in players:
-                if cards:
-                    hands[p].append(cards.pop())
+        random.shuffle(cards_to_deal)
+        hands = [[] for _ in range(num_players)]
+        for i, card in enumerate(cards_to_deal):
+            hands[i % num_players].append(card.name)
         return hands

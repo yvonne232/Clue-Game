@@ -1,73 +1,96 @@
-class Board:
-    """
-    Defines the 3×3 Clue-Less room layout, hallways between rooms,
-    and secret passages. Provides adjacency lookups for movement.
-    """
+# # game/game_engine/board.py
+# from game.models import Room, Hallway
+# from game.game_engine.notifier import Notifier
 
-    ROOMS = [
-        ["Study", "Hall", "Lounge"],
-        ["Library", "Billiard Room", "Dining Room"],
-        ["Conservatory", "Ballroom", "Kitchen"],
-    ]
 
-    # Diagonal secret passages
-    SECRET_PASSAGES = {
-        "Study": "Kitchen",
-        "Kitchen": "Study",
-        "Lounge": "Conservatory",
-        "Conservatory": "Lounge",
-    }
+# class Board:
+#     """Handles all movement and adjacency logic for the Clue-Less board."""
 
-    # Each tuple represents two rooms connected by a hallway
-    RAW_HALLWAYS = [
-        ("Study", "Hall"),
-        ("Hall", "Lounge"),
-        ("Study", "Library"),
-        ("Hall", "Billiard Room"),
-        ("Lounge", "Dining Room"),
-        ("Library", "Billiard Room"),
-        ("Billiard Room", "Dining Room"),
-        ("Library", "Conservatory"),
-        ("Billiard Room", "Ballroom"),
-        ("Dining Room", "Kitchen"),
-        ("Conservatory", "Ballroom"),
-        ("Ballroom", "Kitchen"),
-    ]
+#     def __init__(self):
+#         # Preload all rooms and hallways
+#         self.rooms = {r.name: r for r in Room.objects.all()}
+#         self.hallways = {h.name: h for h in Hallway.objects.all()}
 
-    def __init__(self):
-        # Build hallway names (bidirectional)
-        self.HALLWAYS = {}
-        for r1, r2 in self.RAW_HALLWAYS:
-            name1 = f"Hallway between {r1} and {r2}"
-            name2 = f"Hallway between {r2} and {r1}"
-            self.HALLWAYS[name1] = (r1, r2)
-            self.HALLWAYS[name2] = (r1, r2)
+#         if not self.rooms:
+#             Notifier.broadcast("⚠️ No Room objects found in the database!")
+#         if not self.hallways:
+#             Notifier.broadcast("⚠️ No Hallway objects found in the database!")
 
-        # Build adjacency map
-        self.adjacency = self._build_adjacency()
+#     # ----------------------------------------------------------
+#     # 🔹 Movement Logic
+#     # ----------------------------------------------------------
+#     def get_adjacent_rooms(self, room_or_name):
+#         """Return all directly connected rooms and hallways for a given room."""
+#         if not room_or_name:
+#             return []
 
-    def _build_adjacency(self):
-        adjacency = {room: [] for row in self.ROOMS for room in row}
+#         if isinstance(room_or_name, str):
+#             room = self.rooms.get(room_or_name)
+#         else:
+#             room = room_or_name
 
-        # Link rooms and hallways
-        for hallway, (r1, r2) in self.HALLWAYS.items():
-            adjacency.setdefault(r1, []).append(hallway)
-            adjacency.setdefault(r2, []).append(hallway)
-            adjacency[hallway] = [r1, r2]
+#         if not room:
+#             return []
 
-        # Add secret passages
-        for r, target in self.SECRET_PASSAGES.items():
-            adjacency[r].append(target)
+#         connected = set(room.connected_rooms.all())
 
-        return adjacency
+#         # Add rooms connected through hallways
+#         for h in Hallway.objects.filter(room1=room) | Hallway.objects.filter(room2=room):
+#             connected.add(h.room1 if h.room1 != room else h.room2)
 
-    def get_adjacent_rooms(self, room_name):
-        """Return all rooms/hallways adjacent to a given room or hallway."""
-        return self.adjacency.get(room_name, [])
+#         return list(connected)
 
-    def all_locations(self):
-        """Return a list of all rooms + hallways."""
-        return list(self.adjacency.keys())
+#     def get_connected_hallways(self, room):
+#         """Return all hallways directly adjacent to the given room."""
+#         if not room:
+#             return []
+#         hallways = []
+#         for h in Hallway.objects.all():
+#             if h.room1 == room or h.room2 == room:
+#                 hallways.append(h)
+#         return hallways
 
-    def __repr__(self):
-        return f"<Board: {len(self.adjacency)} locations>"
+#     # ----------------------------------------------------------
+#     # 🔹 Secret Passage
+#     # ----------------------------------------------------------
+#     def get_secret_passage(self, room_name):
+#         """Return the room name that’s diagonally connected via secret passage."""
+#         secret_pairs = {
+#             "Study": "Kitchen",
+#             "Kitchen": "Study",
+#             "Conservatory": "Lounge",
+#             "Lounge": "Conservatory",
+#         }
+#         return self.rooms.get(secret_pairs.get(room_name))
+
+#     # ----------------------------------------------------------
+#     # 🔹 Hallway Utilities
+#     # ----------------------------------------------------------
+#     def get_hallway_between(self, room1, room2):
+#         """Return the hallway object connecting two rooms, if any."""
+#         return Hallway.objects.filter(
+#             room1__in=[room1, room2], room2__in=[room1, room2]
+#         ).first()
+
+#     def is_hallway_occupied(self, hallway_name):
+#         """Check if hallway is currently occupied."""
+#         h = self.hallways.get(hallway_name)
+#         return h.is_occupied if h else False
+
+#     def set_hallway_occupancy(self, hallway_name, occupied=True):
+#         """Mark a hallway as occupied or free."""
+#         h = self.hallways.get(hallway_name)
+#         if h:
+#             h.is_occupied = occupied
+#             h.save(update_fields=["is_occupied"])
+
+#     # ----------------------------------------------------------
+#     # 🔹 Summary Helpers
+#     # ----------------------------------------------------------
+#     def describe(self):
+#         """Print out board layout for debugging."""
+#         Notifier.broadcast("🗺️ Board Layout:")
+#         for r in Room.objects.all():
+#             connected = ", ".join([x.name for x in r.connected_rooms.all()])
+#             hallways = ", ".join([h.name for h in self.get_connected_hallways(r)])
+#             Notifier.broadcast(f"{r.name} → Rooms: [{connected}] | Hallways: [{hallways}]")

@@ -1,51 +1,33 @@
+# game/game_engine/movement.py
 from game.game_engine.notifier import Notifier
 
 class MovementEngine:
-    """
-    Handles movement rules between rooms.
-    """
+    """Handles room/hallway movement logic and occupancy rules."""
 
-    def __init__(self, board):
-        self.board = board
-        # Track which hallways are occupied: {name: player or None}
-        self.hallway_occupancy = {}
+    def __init__(self):
+        self.occupied_hallways = set()
 
-    def is_hallway(self, location):
-        return location.startswith("Hallway between")
+    def is_hallway(self, name):
+        return "Hallway" in name
 
-    def hallway_is_occupied(self, hallway):
-        return self.hallway_occupancy.get(hallway) is not None
+    def hallway_is_occupied(self, hallway_name):
+        return hallway_name in self.occupied_hallways
 
-    def can_move(self, player, destination):
-        # Prevent hallway→hallway moves
-        if self.is_hallway(player.current_room) and self.is_hallway(destination):
-            return False
+    def move(self, player, dest):
+        """Move player and track hallway occupancy."""
+        prev = player["location"]
 
-        # Prevent entering occupied hallway
-        if self.is_hallway(destination) and self.hallway_is_occupied(destination):
-            return False
+        # Free previous hallway
+        if self.is_hallway(prev) and prev in self.occupied_hallways:
+            self.occupied_hallways.remove(prev)
 
-        # Allow secret passage
-        if destination == self.board.SECRET_PASSAGES.get(player.current_room):
-            return True
+        # Check destination
+        if self.is_hallway(dest):
+            if dest in self.occupied_hallways:
+                Notifier.broadcast(f" {player['name']} cannot move to occupied {dest}.")
+                return False
+            self.occupied_hallways.add(dest)
 
-        # Normal adjacency
-        return destination in self.board.get_adjacent_rooms(player.current_room)
-
-    def move(self, player, destination):
-        if not self.can_move(player, destination):
-            Notifier.broadcast(f"🚫 {player.name} cannot move to {destination} (blocked or invalid).")
-            return False
-
-        # Clear old hallway occupancy
-        if self.is_hallway(player.current_room):
-            self.hallway_occupancy[player.current_room] = None
-
-        # Mark new hallway as occupied
-        if self.is_hallway(destination):
-            self.hallway_occupancy[destination] = player.name
-
-        Notifier.broadcast(f"{player.name} moved from {player.current_room} → {destination}")
-        player.current_room = destination
-        player.moved_by_suggestion = False
+        player["location"] = dest
+        Notifier.broadcast(f"{player['name']} moved to {dest}")
         return True

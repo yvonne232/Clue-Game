@@ -1,28 +1,67 @@
 import random
+from game.models import Player, Room, Hallway
 from game.game_engine.notifier import Notifier
+
 
 class SuggestionEngine:
     """
-    Handles making and disproving suggestions.
+    Handles suggestion logic: move the suspect, find who can disprove, and report results.
     """
 
     def __init__(self, players):
-        self.players = players
+        self.players = players  # list of dicts from GameManager
 
-    def handle_suggestion(self, suggester, character, weapon, room):
-        # Move suspect to suggested room
-        suspect = next((p for p in self.players if p.name == character), None)
-        if suspect and not suspect.eliminated:
-            suspect.current_room = room
-            suspect.moved_by_suggestion = True
-            Notifier.broadcast(f"{suspect.name} was moved to {room} by suggestion.")
+    # ======================================================================
+    # Core logic
+    # ======================================================================
+    def handle_suggestion(self, suggesting_player, suspect, weapon, room_name):
+        """
+        Process a suggestion:
+        - Move the suspect to the suggested room.
+        - Iterate through other players to find who can disprove.
+        - Return (message, disproving_card or None)
+        """
 
-        # Check for disproofs
-        others = [p for p in self.players if p != suggester and not p.eliminated]
-        random.shuffle(others)
-        for p in others:
-            matching = [c for c in p.cards if c in (character, weapon, room)]
-            if matching:
-                card = random.choice(matching)
-                return f"{p.name} can disprove with {card}"
-        return "No one can disprove the suggestion."
+        suggester_name = suggesting_player["name"]
+
+        # 1️⃣ Move the suspect to the suggested room
+        suspect_player = next((p for p in self.players if p["name"] == suspect), None)
+        if suspect_player:
+            try:
+                new_room = Room.objects.get(name=room_name)
+            except Room.DoesNotExist:
+                return (f"⚠️ Room {room_name} not found.", None)
+
+            suspect_player["location"] = new_room
+            suspect_player["player_obj"].current_room = new_room
+            suspect_player["player_obj"].save(update_fields=["current_room"])
+            Notifier.broadcast(f"  {suspect} was moved to {room_name} due to the suggestion.")
+
+        # 2️⃣ Find players in order (excluding the suggester)
+        player_order = self._rotate_players(suggesting_player)
+
+        # 3️⃣ Check each for disproof
+        for p in player_order:
+            if p["eliminated"]:
+                continue
+            matching_cards = [
+                card for card in p["hand"]
+                if card in {suspect, weapon, room_name}
+            ]
+            if matching_cards:
+                chosen_card = random.choice(matching_cards)
+                Notifier.broadcast(f"🃏 {p['name']} disproved using {chosen_card}.")
+                return (f"{p['name']} disproved {suggester_name}'s suggestion.", chosen_card)
+
+        # 4️⃣ No one can disprove
+        Notifier.broadcast(f"❌ No one could disprove {suggester_name}'s suggestion!")
+        return (f"No one could disprove {suggester_name}'s suggestion.", None)
+
+    # ======================================================================
+    # Helper: rotate player order
+    # ======================================================================
+    def _rotate_players(self, current_player):
+        """Return players in clockwise order starting after the current one."""
+        idx = self.players.index(current_player)
+        rotated = self.players[idx + 1 :] + self.players[:idx]
+        return rotated
