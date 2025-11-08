@@ -22,15 +22,7 @@ class Deck:
     # ------------------------------------------------------------
     def create_solution(self):
         """Randomly select one character, weapon, and room for the mystery."""
-        existing = Solution.objects.order_by("-created_at").first()
-        if existing:
-            # reuse the most recent one
-            return {
-                "suspect": existing.character.name,
-                "weapon": existing.weapon.name,
-                "room": existing.room.name,
-            }
-
+        
         char = random.choice(self.characters)
         weap = random.choice(self.weapons)
         room = random.choice(self.rooms)
