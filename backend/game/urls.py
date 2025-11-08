@@ -5,6 +5,8 @@ urlpatterns = [
     # Game endpoints
     path('games/', views.GameListCreateView.as_view(), name='game-list'),
     path('games/<int:pk>/', views.GameRetrieveUpdateDeleteView.as_view(), name='game-detail'),
+    path('games/simulate/', views.GameSimulationView.as_view(), name='game-simulate'),
+    path('games/state/', views.GameStateView.as_view(), name='game-state'),
 
     # Player endpoints
     path('players/', views.PlayerListCreateView.as_view(), name='player-list'),

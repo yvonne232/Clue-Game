@@ -14,7 +14,7 @@ class Notifier:
             if layer is not None:
                 async_to_sync(layer.group_send)(
                     f"game_{room}",
-                    {"type": "chat_message", "message": message}
+                    {"type": "game_message", "message": message},
                 )
-        except Exception:
-            pass
+        except Exception as exc:
+            print(f"[Broadcast error] {exc}")

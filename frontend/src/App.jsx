@@ -1,13 +1,58 @@
-import React, { useEffect, useState } from "react";
-import './App.css'
+import React, { useState } from "react";
+import "./App.css";
 import useWebSocket from "./hooks/useWebSocket";
 import GameFeed from "./components/GameFeed";
 
+const defaultApiBase = `${window.location.protocol}//${window.location.hostname}:8000`;
+const API_BASE = import.meta.env.VITE_API_BASE_URL || defaultApiBase;
+
 export default function App() {
   const { messages } = useWebSocket("default");
+  const [isRunning, setIsRunning] = useState(false);
+  const [result, setResult] = useState(null);
+  const [error, setError] = useState("");
+
+  const triggerSimulation = async (rounds = 20) => {
+    setIsRunning(true);
+    setResult(null);
+    setError("");
+
+    try {
+      const response = await fetch(`${API_BASE}/api/games/simulate/`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rounds }),
+      });
+
+      if (!response.ok) {
+        const payload = await response.json().catch(() => ({}));
+        throw new Error(payload.detail || `Simulation failed (${response.status})`);
+      }
+
+      const data = await response.json();
+      setResult(data);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setIsRunning(false);
+    }
+  };
 
   return (
-    <div>
+    <div className="app-root">
+      <div className="controls">
+        <h1>Clue-Less Multiplayer Simulation</h1>
+        <button onClick={() => triggerSimulation()} disabled={isRunning}>
+          {isRunning ? "Running…" : "Run Game Simulation"}
+        </button>
+        {error && <p className="status error">{error}</p>}
+        {result && (
+          <div className="status success">
+            <p>Winner: {result.winner || "No winner yet"}</p>
+            <p>Rounds Played: {result.rounds_played}</p>
+          </div>
+        )}
+      </div>
       <GameFeed messages={messages} />
     </div>
   );

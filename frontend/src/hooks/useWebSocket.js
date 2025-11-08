@@ -5,9 +5,10 @@ export default function useWebSocket(roomName = "default") {
   const socketRef = useRef(null);
 
   useEffect(() => {
-    const wsProtocol = window.location.protocol === "https:" ? "wss" : "ws";
-    const wsUrl = `${wsProtocol}://${window.location.host}/ws/game/${roomName}/`;
-    const socket = new WebSocket(`ws://localhost:8000/ws/game/default/`);
+    const protocol = window.location.protocol === "https:" ? "wss" : "ws";
+    const host = import.meta.env.VITE_WS_HOST || window.location.hostname;
+    const port = import.meta.env.VITE_WS_PORT || "8000";
+    const socket = new WebSocket(`${protocol}://${host}:${port}/ws/game/${roomName}/`);
     socketRef.current = socket;
 
     socket.onopen = () => console.log("✅ Connected to WebSocket");

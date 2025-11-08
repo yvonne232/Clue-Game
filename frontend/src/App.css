@@ -1,0 +1,60 @@
+.app-root {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  padding: 2rem;
+  min-height: 100vh;
+  background: #f0f4ff;
+  font-family: system-ui, sans-serif;
+}
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-width: 480px;
+}
+
+.controls h1 {
+  margin: 0;
+  font-size: 1.6rem;
+  color: #1e3a8a;
+}
+
+.controls button {
+  padding: 0.75rem 1rem;
+  border: none;
+  border-radius: 6px;
+  background: #1d4ed8;
+  color: #fff;
+  font-size: 1rem;
+  cursor: pointer;
+  transition: background 0.2s ease-in-out;
+}
+
+.controls button:not(:disabled):hover {
+  background: #1e40af;
+}
+
+.controls button:disabled {
+  background: #93c5fd;
+  cursor: not-allowed;
+}
+
+.status {
+  margin: 0;
+  padding: 0.75rem;
+  border-radius: 6px;
+  font-size: 0.95rem;
+}
+
+.status.error {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+.status.success {
+  background: #dcfce7;
+  color: #166534;
+}
+

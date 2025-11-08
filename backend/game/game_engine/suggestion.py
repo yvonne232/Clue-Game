@@ -26,16 +26,24 @@ class SuggestionEngine:
 
         # 1️⃣ Move the suspect to the suggested room
         suspect_player = next((p for p in self.players if p["name"] == suspect), None)
-        if suspect_player:
+        if suspect_player and suspect_player is not suggesting_player:
             try:
                 new_room = Room.objects.get(name=room_name)
             except Room.DoesNotExist:
                 return (f"⚠️ Room {room_name} not found.", None)
 
+            previous_location = suspect_player["location"]
+            if isinstance(previous_location, Hallway):
+                previous_location.is_occupied = False
+                previous_location.save(update_fields=["is_occupied"])
+
             suspect_player["location"] = new_room
             suspect_player["player_obj"].current_room = new_room
             suspect_player["player_obj"].save(update_fields=["current_room"])
+            suspect_player["arrived_via_suggestion"] = True
             Notifier.broadcast(f"  {suspect} was moved to {room_name} due to the suggestion.")
+        elif suspect_player:
+            Notifier.broadcast(f"  {suspect} is already in {room_name}.")
 
         # 2️⃣ Find players in order (excluding the suggester)
         player_order = self._rotate_players(suggesting_player)
