@@ -191,7 +191,7 @@ export default function LobbyView() {
         <div className="current-lobby">
           <h2>Lobby: {currentLobby.name}</h2>
           <div className="player-list">
-            <h3>Players:</h3>
+            <h3>Players: {currentLobby.player_count}</h3>
             {currentLobby.players.map(player => (
               <div key={player.id} className="player-item">
                 Player {player.id}
