@@ -1,6 +1,6 @@
 import random
 from django.db import models
-from game.models import Game, Player, Card, Room, Hallway
+from game.models import Game, Player, Card, Room, Hallway, StartingPosition
 from game.game_engine.deck import Deck
 from game.game_engine.suggestion import SuggestionEngine
 from game.game_engine.accusation import AccusationEngine
@@ -18,17 +18,29 @@ class GameManager:
 
         # --- Load or create the game ---
         self.game, _ = Game.objects.get_or_create(name=game_name)
+        Game.objects.filter(pk=self.game.pk).update(
+            is_completed=False,
+            is_active=True,
+            current_player=None,
+        )
         self.game.is_completed = False
         self.game.is_active = True
         self.game.current_player = None
-        self.game.save(update_fields=["is_completed", "is_active", "current_player"])
 
         # --- Clear old players for a clean simulation ---
         Player.objects.filter(game=self.game).delete()
 
-        # --- Initialize Deck (from real DB cards) ---
+        # --- Initialize Deck ---
         self.deck = Deck()
-        self.solution = self.deck.create_solution()
+        solution_obj = self.deck.create_solution()
+        self.solution = {
+            "suspect": solution_obj.character.name,
+            "weapon": solution_obj.weapon.name,
+            "room": solution_obj.room.name,
+        }
+        Game.objects.filter(pk=self.game.pk).update(solution=solution_obj)
+        self.game.solution = solution_obj
+        
         Notifier.broadcast(f"Secret solution set: {self.solution}")
 
         # --- Load Rooms and Hallways ---
@@ -45,52 +57,53 @@ class GameManager:
             w.name for w in Card.objects.filter(card_type="WEAP").order_by("id")
         ]
 
-        # --- Clear hallway occupancy first ---
-        for hw in Hallway.objects.all():
-            hw.is_occupied = False
-            hw.save(update_fields=["is_occupied"])
-
-        # --- Assign players to canonical starting hallways (based on DB names) ---
-        starting_positions = {
-            "Miss Scarlet": "Hallway 2",      # Hall – Lounge
-            "Colonel Mustard": "Hallway 9",   # Lounge – Dining Room
-            "Mrs. White": "Hallway 6",        # Ballroom – Kitchen
-            "Mr. Green": "Hallway 5",         # Conservatory – Ballroom
-            "Mrs. Peacock": "Hallway 10",     # Library – Conservatory
-            "Professor Plum": "Hallway 7",    # Study – Library
-        }
-
         self.players = []
-        for name, hallway_name in starting_positions.items():
-            char_card = Card.objects.get(name=name)
-            hallway = Hallway.objects.filter(name=hallway_name).first()
-            if not hallway:
-                raise RuntimeError(f"Missing hallway: {hallway_name} (check migration data)")
 
-            # Create player and set position
-            player = Player.objects.create(
-                game=self.game,
-                character_card=char_card,
-                current_room=None,
-                is_eliminated=False,
+        positions = list(
+            StartingPosition.objects.select_related("hallway", "character")
+        )
+        if not positions:
+            raise RuntimeError(
+                "❌ No starting positions available. Seed them via migrations or admin."
             )
 
-            # Update hallway occupancy
-            hallway.is_occupied = True
-            hallway.save(update_fields=["is_occupied"])
+        for pos in positions:
+            hallway = pos.hallway
+            character = pos.character
+            if hallway is None or character is None:
+                Notifier.broadcast(f"⚠️ Skipping starting position with missing data: {pos}")
+                continue
+
+            player = Player.objects.create(
+                game=self.game,
+                character_card=character,
+                starting_position=pos,
+                current_hallway=pos.hallway,
+                current_room=None,
+                is_eliminated=False,
+                is_active_turn=False,
+            )
+            self._set_hallway_occupied(hallway, True)
 
             # Register in memory
-            self.players.append({
-                "name": name,
-                "player_obj": player,
-                "location": hallway,
-                "hand": [],
-                "eliminated": False,
-                "known_cards": set(),
-                "arrived_via_suggestion": False,
-            })
+            self.players.append(
+                {
+                    "name": character.name,
+                    "player_obj": player,
+                    "location": hallway,
+                    "hand": [],
+                    "eliminated": False,
+                    "known_cards": set(),
+                    "arrived_via_suggestion": False,
+                }
+            )
 
         # --- Deal cards ---
+        if not self.players:
+            raise RuntimeError(
+                "❌ No players available. Ensure StartingPosition rows exist before starting the game."
+            )
+
         hands = self.deck.deal(len(self.players))
         for i, p in enumerate(self.players):
             p["hand"] = hands[i]
@@ -124,6 +137,9 @@ class GameManager:
             for player in self.players:
                 if player["eliminated"]:
                     continue
+                player_obj = player["player_obj"]
+                Game.objects.filter(pk=self.game.pk).update(current_player=player_obj)
+                self.game.current_player = player_obj
                 self.play_turn(player)
                 if self.is_over:
                     break
@@ -157,6 +173,9 @@ class GameManager:
                 for p in self.players
             ],
         }
+
+        Game.objects.filter(pk=self.game.pk).update(current_player=None)
+        self.game.current_player = None
 
     # ======================================================================
     # Player turn logic
@@ -220,13 +239,17 @@ class GameManager:
         name = player["name"]
         connected_rooms = [hallway.room1, hallway.room2]
 
-        hallway.is_occupied = False
-        hallway.save(update_fields=["is_occupied"])
+        self._set_hallway_occupied(hallway, False)
 
         dest = random.choice(connected_rooms)
         player["location"] = dest
-        player["player_obj"].current_room = dest
-        player["player_obj"].save(update_fields=["current_room"])
+        player_obj = player["player_obj"]
+        Player.objects.filter(pk=player_obj.pk).update(
+            current_hallway=None,
+            current_room=dest,
+        )
+        player_obj.current_hallway = None
+        player_obj.current_room = dest
         Notifier.broadcast(f"🚶 {name} moves from {hallway.name} → {dest.name}")
 
     def _move_from_room(self, player, can_stay):
@@ -264,19 +287,28 @@ class GameManager:
 
         dest = random.choice(options)
         if isinstance(dest, Hallway):
-            dest.is_occupied = True
-            dest.save(update_fields=["is_occupied"])
+            self._set_hallway_occupied(dest, True)
             player["location"] = dest
-            player["player_obj"].current_room = None
+            player_obj = player["player_obj"]
+            Player.objects.filter(pk=player_obj.pk).update(
+                current_room=None,
+                current_hallway=dest,
+            )
+            player_obj.current_room = None
+            player_obj.current_hallway = dest
             Notifier.broadcast(f"🚶 {name} moves from {room.name} → {dest.name}")
         else:
             player["location"] = dest
-            player["player_obj"].current_room = dest
+            player_obj = player["player_obj"]
+            Player.objects.filter(pk=player_obj.pk).update(
+                current_room=dest,
+                current_hallway=None,
+            )
+            player_obj.current_room = dest
+            player_obj.current_hallway = None
             Notifier.broadcast(
                 f"✨ {name} takes a secret passage from {room.name} → {dest.name}"
             )
-
-        player["player_obj"].save(update_fields=["current_room"])
 
     # ======================================================================
     # Accusation phase
@@ -289,11 +321,29 @@ class GameManager:
             Notifier.broadcast(f"🏆 {name} correctly solved the mystery!")
             self.winner = name
             self.is_over = True
+            Game.objects.filter(pk=self.game.pk).update(
+                is_completed=True,
+                is_active=False,
+            )
             self.game.is_completed = True
             self.game.is_active = False
-            self.game.save(update_fields=["is_completed", "is_active"])
         else:
             player["eliminated"] = True
+            Player.objects.filter(pk=player["player_obj"].pk).update(is_eliminated=True)
             player["player_obj"].is_eliminated = True
-            player["player_obj"].save(update_fields=["is_eliminated"])
             Notifier.broadcast(f"💀 {name} is eliminated for false accusation.")
+
+    # ======================================================================
+    # Helper utilities
+    # ======================================================================
+    def _get_starting_positions(self):
+        return list(
+            StartingPosition.objects.select_related("hallway", "character")
+        )
+
+    def _set_hallway_occupied(self, hallway, occupied):
+        if hallway is None:
+            return
+        updated = Hallway.objects.filter(pk=hallway.pk).update(is_occupied=occupied)
+        if updated:
+            hallway.is_occupied = occupied

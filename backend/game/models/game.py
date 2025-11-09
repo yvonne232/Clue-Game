@@ -8,19 +8,16 @@ class Game(models.Model):
     is_active = models.BooleanField(default=True)
     is_completed = models.BooleanField(default=False)
 
-    # Foreign key to the mystery solution (1 per game)
     solution = models.OneToOneField(
-        'Solution', on_delete=models.CASCADE, null=True, blank=True
+        "Solution", on_delete=models.CASCADE, null=True, blank=True
     )
 
-    # Optional: track whose turn it is
     current_player = models.ForeignKey(
-        'Player', on_delete=models.SET_NULL, null=True, blank=True, related_name='current_turn_games'
-    )
-
-    # Optional: starting room (can be used for debugging or setup)
-    starting_room = models.ForeignKey(
-        'Room', on_delete=models.SET_NULL, null=True, blank=True
+        "Player",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="current_turn_games",
     )
 
     def __str__(self):

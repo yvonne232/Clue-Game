@@ -1,8 +1,12 @@
+import time
+
 from rest_framework import generics, status
 from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
-from .models import Game, Player
+from django.db import transaction, OperationalError
+
+from .models import Game, Player, Hallway, Solution
 from .serializers import GameSerializer, PlayerSerializer
 from game.game_engine.game_manager import GameManager
 
@@ -43,18 +47,97 @@ class GameSimulationView(APIView):
     """POST to trigger a full simulation and stream output over WebSocket."""
 
     permission_classes = [AllowAny]
+    MAX_DB_RETRIES = 3
+    RETRY_SLEEP_SECONDS = 0.15
+    TRANSIENT_VALUEERROR = "Save with update_fields did not affect any rows"
 
     def post(self, request, *args, **kwargs):
         game_name = request.data.get("game_name", "default")
         rounds = int(request.data.get("rounds", 20))
 
-        try:
-            manager = GameManager(game_name=game_name)
-            summary = manager.run_game(max_rounds=rounds)
-        except Exception as exc:
-            return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+        summary = None
+        for attempt in range(self.MAX_DB_RETRIES):
+            try:
+                manager = GameManager(game_name=game_name)
+                summary = manager.run_game(max_rounds=rounds)
+                break
+            except OperationalError as exc:
+                if "locked" in str(exc).lower() and attempt < self.MAX_DB_RETRIES - 1:
+                    time.sleep(self.RETRY_SLEEP_SECONDS)
+                    continue
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError as exc:
+                if (
+                    self.TRANSIENT_VALUEERROR in str(exc)
+                    and attempt < self.MAX_DB_RETRIES - 1
+                ):
+                    time.sleep(self.RETRY_SLEEP_SECONDS)
+                    continue
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
 
+        if summary is None:
+            return Response(
+                {"detail": "Simulation could not be completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
         return Response(summary, status=status.HTTP_200_OK)
+
+
+class GameResetView(APIView):
+    """POST to reset a game session back to its initial state."""
+
+    permission_classes = [AllowAny]
+    MAX_DB_RETRIES = 3
+    RETRY_SLEEP_SECONDS = 0.15
+    TRANSIENT_VALUEERROR = GameSimulationView.TRANSIENT_VALUEERROR
+
+    def post(self, request, *args, **kwargs):
+        game_name = request.data.get("game_name", "default")
+
+        manager = None
+        for attempt in range(self.MAX_DB_RETRIES):
+            try:
+                with transaction.atomic():
+                    # Clear occupancy before recreating players
+                    Hallway.objects.update(is_occupied=False)
+
+                    # Remove existing game state (cascades to players)
+                    Game.objects.filter(name=game_name).delete()
+                    Solution.objects.all().delete()
+
+                    manager = GameManager(game_name=game_name)
+                break
+            except OperationalError as exc:
+                if "locked" in str(exc).lower() and attempt < self.MAX_DB_RETRIES - 1:
+                    time.sleep(self.RETRY_SLEEP_SECONDS)
+                    continue
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            except ValueError as exc:
+                if (
+                    self.TRANSIENT_VALUEERROR in str(exc)
+                    and attempt < self.MAX_DB_RETRIES - 1
+                ):
+                    time.sleep(self.RETRY_SLEEP_SECONDS)
+                    continue
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+            except Exception as exc:
+                return Response({"detail": str(exc)}, status=status.HTTP_400_BAD_REQUEST)
+
+        if manager is None:
+            return Response(
+                {"detail": "Reset could not be completed."},
+                status=status.HTTP_400_BAD_REQUEST,
+            )
+        return Response(
+            {
+                "status": "reset",
+                "game": game_name,
+                "players": [p["name"] for p in manager.players],
+            },
+            status=status.HTTP_200_OK,
+        )
 
 
 class GameStateView(APIView):

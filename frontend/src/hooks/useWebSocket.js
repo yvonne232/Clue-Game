@@ -27,5 +27,7 @@ export default function useWebSocket(roomName = "default") {
     }
   };
 
-  return { messages, sendMessage };
+  const clearMessages = () => setMessages([]);
+
+  return { messages, sendMessage, clearMessages };
 }

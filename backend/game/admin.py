@@ -1,6 +1,6 @@
 from django.contrib import admin
 # Register your models here.
-from .models import Card, Solution, Room, Hallway, Game, Player
+from .models import Card, Solution, Room, Hallway, Game, Player, StartingPosition 
 
 @admin.register(Card)
 class CardAdmin(admin.ModelAdmin):
@@ -16,27 +16,56 @@ class SolutionAdmin(admin.ModelAdmin):
 
 @admin.register(Room)
 class RoomAdmin(admin.ModelAdmin):
-    list_display = ('name', 'has_secret_passage')
-    search_fields = ('name',)
-    filter_horizontal = ('connected_rooms',)
+    list_display = ("name", "has_secret_passage", "connected_rooms_list")
+    search_fields = ("name",)
+    filter_horizontal = ("connected_rooms",)
+
+    @admin.display(description="Connected Rooms")
+    def connected_rooms_list(self, obj):
+        return ", ".join(room.name for room in obj.connected_rooms.all())
 
 
 @admin.register(Hallway)
 class HallwayAdmin(admin.ModelAdmin):
-    list_display = ('name', 'room1', 'room2', 'is_occupied')
-    list_filter = ('is_occupied',)
+    list_display = ("name", "room1", "room2", "is_occupied")
+    list_filter = ("is_occupied",)
+    search_fields = ("name", "room1__name", "room2__name")
 
 @admin.register(Game)
 class GameAdmin(admin.ModelAdmin):
-    list_display = ('name', 'is_active', 'is_completed', 'created_at')
-    list_filter = ('is_active', 'is_completed')
-    search_fields = ('name',)
-    autocomplete_fields = ('solution', 'current_player', 'starting_room')
-
+    list_display = (
+        "name",
+        "is_active",
+        "is_completed",
+        "created_at",
+        "solution",
+        "current_player",
+    )
+    list_filter = ("is_active", "is_completed")
+    search_fields = ("name",)
+    autocomplete_fields = ("solution", "current_player")
 
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
-    list_display = ('character_card', 'game', 'current_room', 'is_active_turn', 'is_eliminated')
-    list_filter = ('game', 'is_active_turn', 'is_eliminated')
-    search_fields = ('character_card__name', 'game__name')
-    autocomplete_fields = ('character_card', 'game', 'current_room')
+    list_display = (
+        "character_card",
+        "game",
+        "starting_position",
+        "current_room",
+        "current_hallway",
+        "is_active_turn",
+        "is_eliminated",
+    )
+    list_filter = ("game", "is_active_turn", "is_eliminated")
+    search_fields = ("character_card__name", "game__name")
+    autocomplete_fields = (
+        "character_card",
+        "game",
+        "starting_position",
+        "current_room",
+        "current_hallway",
+    )
+@admin.register(StartingPosition)
+class StartingPositionAdmin(admin.ModelAdmin):
+    list_display = ("character", "hallway")
+    search_fields = ("character__name", "hallway__name")

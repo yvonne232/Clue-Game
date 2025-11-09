@@ -24,7 +24,7 @@ class SuggestionEngine:
 
         suggester_name = suggesting_player["name"]
 
-        # 1️⃣ Move the suspect to the suggested room
+        # Move the suspect to the suggested room
         suspect_player = next((p for p in self.players if p["name"] == suspect), None)
         if suspect_player and suspect_player is not suggesting_player:
             try:
@@ -34,21 +34,27 @@ class SuggestionEngine:
 
             previous_location = suspect_player["location"]
             if isinstance(previous_location, Hallway):
-                previous_location.is_occupied = False
-                previous_location.save(update_fields=["is_occupied"])
+                updated = Hallway.objects.filter(pk=previous_location.pk).update(is_occupied=False)
+                if updated:
+                    previous_location.is_occupied = False
 
             suspect_player["location"] = new_room
-            suspect_player["player_obj"].current_room = new_room
-            suspect_player["player_obj"].save(update_fields=["current_room"])
+            player_obj = suspect_player["player_obj"]
+            Player.objects.filter(pk=player_obj.pk).update(
+                current_hallway=None,
+                current_room=new_room,
+            )
+            player_obj.current_hallway = None
+            player_obj.current_room = new_room
             suspect_player["arrived_via_suggestion"] = True
             Notifier.broadcast(f"  {suspect} was moved to {room_name} due to the suggestion.")
         elif suspect_player:
             Notifier.broadcast(f"  {suspect} is already in {room_name}.")
 
-        # 2️⃣ Find players in order (excluding the suggester)
+        # Find players in order (excluding the suggester)
         player_order = self._rotate_players(suggesting_player)
 
-        # 3️⃣ Check each for disproof
+        # Check each for disproof
         for p in player_order:
             if p["eliminated"]:
                 continue

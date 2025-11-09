@@ -7,10 +7,40 @@ const defaultApiBase = `${window.location.protocol}//${window.location.hostname}
 const API_BASE = import.meta.env.VITE_API_BASE_URL || defaultApiBase;
 
 export default function App() {
-  const { messages } = useWebSocket("default");
+  const { messages, clearMessages } = useWebSocket("default");
   const [isRunning, setIsRunning] = useState(false);
+  const [isResetting, setIsResetting] = useState(false);
   const [result, setResult] = useState(null);
   const [error, setError] = useState("");
+
+  const resetGame = async (gameName = "default") => {
+    setIsResetting(true);
+    setError("");
+    clearMessages();
+
+    try {
+      await callWithRetry(async () => {
+        const response = await fetch(`${API_BASE}/api/games/reset/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ game_name: gameName }),
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.detail || `Reset failed (${response.status})`);
+        }
+
+        await response.json();
+      });
+      setResult(null);
+    } catch (err) {
+      setError(err.message);
+      throw err;
+    } finally {
+      setIsResetting(false);
+    }
+  };
 
   const triggerSimulation = async (rounds = 20) => {
     setIsRunning(true);
@@ -18,18 +48,21 @@ export default function App() {
     setError("");
 
     try {
-      const response = await fetch(`${API_BASE}/api/games/simulate/`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ rounds }),
+      const data = await callWithRetry(async () => {
+        const response = await fetch(`${API_BASE}/api/games/simulate/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ rounds }),
+        });
+
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          throw new Error(payload.detail || `Simulation failed (${response.status})`);
+        }
+
+        return response.json();
       });
 
-      if (!response.ok) {
-        const payload = await response.json().catch(() => ({}));
-        throw new Error(payload.detail || `Simulation failed (${response.status})`);
-      }
-
-      const data = await response.json();
       setResult(data);
     } catch (err) {
       setError(err.message);
@@ -42,9 +75,26 @@ export default function App() {
     <div className="app-root">
       <div className="controls">
         <h1>Clue-Less Multiplayer Simulation</h1>
-        <button onClick={() => triggerSimulation()} disabled={isRunning}>
-          {isRunning ? "Running…" : "Run Game Simulation"}
-        </button>
+        <div className="button-row">
+          <button
+            onClick={async () => {
+              try {
+                await resetGame();
+              } catch {
+                // error already recorded
+              }
+            }}
+            disabled={isResetting || isRunning}
+          >
+            {isResetting ? "Resetting…" : "Reset Game"}
+          </button>
+          <button
+            onClick={() => triggerSimulation()}
+            disabled={isRunning || isResetting}
+          >
+            {isRunning ? "Running…" : "Run Simulation"}
+          </button>
+        </div>
         {error && <p className="status error">{error}</p>}
         {result && (
           <div className="status success">
@@ -56,6 +106,31 @@ export default function App() {
       <GameFeed messages={messages} />
     </div>
   );
+}
+
+const RETRYABLE_ERRORS = [
+  "Save with update_fields did not affect any rows",
+  "database is locked",
+];
+
+async function callWithRetry(action, retries = 2, delayMs = 200) {
+  let attempt = 0;
+  while (attempt <= retries) {
+    try {
+      return await action();
+    } catch (err) {
+      const message = err?.message || "";
+      const shouldRetry =
+        attempt < retries && RETRYABLE_ERRORS.some((signal) => message.includes(signal));
+      if (!shouldRetry) {
+        throw err;
+      }
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+      attempt += 1;
+    }
+  }
+  // Should never reach here
+  throw new Error("Exceeded retry attempts");
 }
 
 // function App() {

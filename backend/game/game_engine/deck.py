@@ -1,5 +1,5 @@
 import random
-from game.models import Card, Solution
+from game.models import Card, Solution, Game
 
 
 class Deck:
@@ -22,20 +22,17 @@ class Deck:
     # ------------------------------------------------------------
     def create_solution(self):
         """Randomly select one character, weapon, and room for the mystery."""
-        
+
         char = random.choice(self.characters)
         weap = random.choice(self.weapons)
         room = random.choice(self.rooms)
 
-        sol = Solution.objects.create(character=char, weapon=weap, room=room)
-        return {
-            "suspect": char.name,
-            "weapon": weap.name,
-            "room": room.name,
-        }
+        Game.objects.update(solution=None)
+        Solution.objects.all().delete()
+        return Solution.objects.create(character=char, weapon=weap, room=room)
 
     # ------------------------------------------------------------
-    # 🃏 Deal cards evenly among players
+    #  Deal cards evenly among players
     # ------------------------------------------------------------
     def deal(self, num_players):
         """Deal remaining (non-solution) cards evenly among players."""
