@@ -15,7 +15,7 @@ urlpatterns = [
 
     # Lobby endpoints
     path('lobbies/', views.list_lobbies, name='lobby-list'),
-    path('lobbies/create/', views.create_lobby, name='lobby-create'),
+    path('lobbies/create/', views.create_new_lobby, name='lobby-create'),
     path('lobbies/<int:lobby_id>/join/', views.join_lobby, name='lobby-join'),
     path('lobbies/<int:lobby_id>/leave/', views.leave_lobby, name='lobby-leave'),
     

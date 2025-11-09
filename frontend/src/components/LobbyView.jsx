@@ -38,6 +38,18 @@ export default function LobbyView() {
       const playerId = localStorage.getItem('playerId');
       console.log('Creating lobby with playerId:', playerId);
       
+      if (!playerId) {
+        console.log('No player ID found, creating new player first');
+        await createPlayer();
+      }
+      
+      // Get the (potentially new) player ID
+      const currentPlayerId = localStorage.getItem('playerId');
+      if (!currentPlayerId) {
+        console.error('Failed to create player');
+        return;
+      }
+      
       const response = await fetch('http://127.0.0.1:8000/api/lobbies/create/', {
         method: 'POST',
         headers: {
@@ -45,11 +57,18 @@ export default function LobbyView() {
         },
         body: JSON.stringify({
           name: newLobbyName,
-          player_id: playerId
+          player_id: currentPlayerId
         })
       });
       const data = await response.json();
       console.log('Lobby created response:', data);
+      
+      if (response.status === 404 && data.error === 'Player not found') {
+        console.log('Player not found, creating new player and retrying');
+        await createPlayer();
+        // Retry creating lobby with new player
+        return createLobby();
+      }
       
       if (data.error) {
         console.error('Error from server:', data.error);
@@ -61,6 +80,9 @@ export default function LobbyView() {
       fetchLobbies();
     } catch (error) {
       console.error('Error creating lobby:', error);
+      if (error.message.includes('Failed to fetch')) {
+        console.error('Network error - check if the server is running');
+      }
     }
   };
 

@@ -2,6 +2,70 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models.lobby_player import LobbyPlayer
+# from .models.lobby import Lobby
+# from .serializers import LobbySerializer
+
+# class LobbyConsumer(AsyncWebsocketConsumer):
+#     async def connect(self):
+#         await self.accept()
+#         await self.channel_layer.group_add("lobbies", self.channel_name)
+#         # Send initial lobby list
+#         await self.send_lobby_update()
+
+#     async def disconnect(self, close_code):
+#         await self.channel_layer.group_discard("lobbies", self.channel_name)
+
+#     async def receive(self, text_data):
+#         try:
+#             data = json.loads(text_data)
+#             print(f"Received WebSocket message: {data}")
+            
+#             if data['type'] == 'lobby_action':
+#                 # Handle lobby actions (create, join, leave)
+#                 action = data.get('action')
+#                 if action in ['create', 'join', 'leave']:
+#                     # Broadcast lobby update to all clients
+#                     await self.channel_layer.group_send(
+#                         "lobbies",
+#                         {
+#                             "type": "send_lobby_update",
+#                         }
+#                     )
+#             elif data['type'] == 'get_lobbies':
+#                 # Send current lobby state to requesting client
+#                 await self.send_lobby_update()
+#             elif data['type'] == 'ping':
+#                 await self.send(text_data=json.dumps({
+#                     'type': 'pong'
+#                 }))
+                
+#             # After any message, send updated lobby state
+#             await self.send_lobby_update()
+            
+#         except json.JSONDecodeError as e:
+#             print(f"Error parsing WebSocket message: {e}")
+#             pass
+
+#     async def send_lobby_update(self, event=None):
+#         """Send updated lobby list to all connected clients"""
+#         try:
+#             print("Fetching lobbies for WebSocket update")
+#             lobbies = await self.get_lobbies()
+#             message = {
+#                 'type': 'lobby_update',
+#                 'lobbies': lobbies
+#             }
+#             print(f"Sending lobby update via WebSocket: {message}")
+#             await self.send(text_data=json.dumps(message))
+#         except Exception as e:
+#             print(f"Error sending lobby update via WebSocket: {e}")
+
+#     @database_sync_to_async
+#     def get_lobbies(self):
+#         """Get all active lobbies with their players"""
+#         lobbies = Lobby.objects.filter(is_active=True).prefetch_related('lobby_players')
+#         serializer = LobbySerializer(lobbies, many=True)
+#         return serializer.data
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):

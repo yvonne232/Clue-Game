@@ -5,6 +5,8 @@ from rest_framework.permissions import AllowAny
 from rest_framework.response import Response
 from rest_framework.views import APIView
 from django.db import transaction, OperationalError
+from channels.layers import get_channel_layer
+from asgiref.sync import async_to_sync
 
 from .models import Game, Player, Hallway, Solution
 from .models.lobby import Lobby
@@ -59,23 +61,45 @@ from django.db import transaction
 from django.core.exceptions import ValidationError
 
 @api_view(['POST'])
-def create_lobby(request):
+def create_new_lobby(request):
+    print("request received to create lobby")
     try:
         name = request.data.get('name')
         player_id = request.data.get('player_id')
         
+        print(f"Creating lobby with name: {name} and player_id: {player_id}")
+        
+        if not player_id:
+            print("No player_id provided in request")
+            return JsonResponse({'error': 'player_id is required'}, status=400)
+            
+        if not name:
+            print("No name provided in request")
+            return JsonResponse({'error': 'name is required'}, status=400)
+        
         with transaction.atomic():
-            # First, get the player and ensure they're not in another lobby
-            player = LobbyPlayer.objects.get(id=player_id)
+            try:
+                # First, get the player and ensure they're not in another lobby
+                print(f"Looking up player with id: {player_id}")
+                player = LobbyPlayer.objects.get(id=player_id)
+                print(f"Found player: {player.id}")
+            except LobbyPlayer.DoesNotExist:
+                print(f"Player with id {player_id} not found in database")
+                return JsonResponse({'error': 'Player not found'}, status=404)
+            
             if player.lobby is not None:
+                print(f"Player {player_id} is already in lobby {player.lobby.id}")
                 return JsonResponse({
                     'error': 'Player is already in another lobby'
                 }, status=400)
             
             # Create the lobby
+            print(f"Creating new lobby with name: {name}")
             lobby = Lobby.objects.create(name=name)
+            print(f"Created lobby with id: {lobby.id}")
             
             # Add the player to the lobby
+            print(f"Adding player {player_id} to lobby {lobby.id}")
             player.lobby = lobby
             player.save()
             
@@ -87,6 +111,10 @@ def create_lobby(request):
             serializer = LobbySerializer(lobby)
             serialized_data = serializer.data
             print(f"Serialized data: {serialized_data}")
+            
+            # Broadcast update to all connected clients
+            # broadcast_lobby_update()
+            
             return JsonResponse(serialized_data)
     except LobbyPlayer.DoesNotExist:
         return JsonResponse({'error': 'Player not found'}, status=404)
@@ -96,6 +124,25 @@ def create_lobby(request):
         return JsonResponse({'error': str(e)}, status=400)
 
 @api_view(['GET'])
+# def broadcast_lobby_update():
+#     """Helper function to broadcast lobby updates to all connected clients"""
+#     try:
+#         channel_layer = get_channel_layer()
+#         lobbies = Lobby.objects.filter(is_active=True).prefetch_related('lobby_players')
+#         serializer = LobbySerializer(lobbies, many=True)
+#         lobby_data = serializer.data
+        
+#         print(f"Broadcasting lobby update: {lobby_data}")
+        
+#         async_to_sync(channel_layer.group_send)(
+#             "lobbies",
+#             {
+#                 "type": "send_lobby_update",
+#             }
+#         )
+#     except Exception as e:
+#         print(f"Error broadcasting lobby update: {e}")
+
 def list_lobbies(request):
     print("Fetching active lobbies")
     with transaction.atomic():
@@ -133,6 +180,10 @@ def list_lobbies(request):
         serializer = LobbySerializer(lobbies, many=True)
         response_data = {"lobbies": serializer.data}
         print(f"Response data: {response_data}")
+        
+        # Broadcast updates to all connected clients
+        # broadcast_lobby_update()
+        
         return JsonResponse(response_data)
 
 @api_view(['POST'])
@@ -202,6 +253,10 @@ def join_lobby(request, lobby_id):
             serializer = LobbySerializer(lobby)
             response_data = serializer.data
             print(f"Response data: {response_data}")
+            
+            # Broadcast update to all connected clients
+            # broadcast_lobby_update()
+            
             return JsonResponse(response_data)
     except Lobby.DoesNotExist:
         return JsonResponse({'error': 'Lobby not found'}, status=404)
@@ -238,7 +293,12 @@ def leave_lobby(request, lobby_id):
                 return JsonResponse({'message': 'Lobby closed', 'success': True})
             
             serializer = LobbySerializer(lobby)
-            return JsonResponse({'success': True, **serializer.data})
+            response_data = {'success': True, **serializer.data}
+            
+            # Broadcast update to all connected clients
+            # broadcast_lobby_update()
+            
+            return JsonResponse(response_data)
     except Lobby.DoesNotExist:
         return JsonResponse({'error': 'Lobby not found'}, status=404)
     except LobbyPlayer.DoesNotExist:
