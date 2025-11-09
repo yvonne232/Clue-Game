@@ -16,8 +16,10 @@ urlpatterns = [
     # Lobby endpoints
     path('lobbies/', views.list_lobbies, name='lobby-list'),
     path('lobbies/create/', views.create_new_lobby, name='lobby-create'),
+    path('lobbies/<int:lobby_id>/', views.get_lobby, name='lobby-detail'),
     path('lobbies/<int:lobby_id>/join/', views.join_lobby, name='lobby-join'),
     path('lobbies/<int:lobby_id>/leave/', views.leave_lobby, name='lobby-leave'),
+    path('lobbies/<int:lobby_id>/select-character/', views.select_character, name='lobby-select-character'),
     
     # Player endpoints
     path('player/create/', views.create_player, name='player-create'),

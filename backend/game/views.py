@@ -279,7 +279,8 @@ def leave_lobby(request, lobby_id):
                     'error': 'Player is not in this lobby'
                 }, status=400)
             
-            # Remove player from lobby
+            # Remove player's character selection and lobby assignment
+            player.character_card = None
             player.lobby = None
             player.save()
             
@@ -303,6 +304,81 @@ def leave_lobby(request, lobby_id):
         return JsonResponse({'error': 'Lobby not found'}, status=404)
     except LobbyPlayer.DoesNotExist:
         return JsonResponse({'error': 'Player not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+            
+@api_view(['POST'])
+def select_character(request, lobby_id):
+    try:
+        with transaction.atomic():
+            lobby = Lobby.objects.get(id=lobby_id)
+            player_id = request.data.get('player_id')
+            character_name = request.data.get('character_name')
+            
+            if not player_id or not character_name:
+                return JsonResponse({
+                    'error': 'player_id and character_name are required'
+                }, status=400)
+            
+            # Get the player and check if they're in the lobby
+            player = LobbyPlayer.objects.get(id=player_id)
+            if player.lobby_id != lobby.id:
+                return JsonResponse({
+                    'error': 'Player is not in this lobby'
+                }, status=400)
+            
+            from .class_draft.constants import SUSPECTS
+            if character_name not in SUSPECTS:
+                return JsonResponse({
+                    'error': 'Invalid character name'
+                }, status=400)
+            
+            # Check if character is already taken
+            if LobbyPlayer.objects.filter(
+                lobby=lobby,
+                character_card__name=character_name
+            ).exclude(id=player.id).exists():
+                return JsonResponse({
+                    'error': 'Character is already taken'
+                }, status=400)
+            
+            # Get or create the character card
+            from .models import Card
+            character_card, _ = Card.objects.get_or_create(
+                name=character_name,
+                card_type='CHAR'
+            )
+            
+            # Assign the character to the player
+            player.character_card = character_card
+            player.save()
+            
+            # Re-fetch the lobby and serialize it
+            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby.id)
+            serializer = LobbySerializer(lobby)
+            
+            # broadcast_lobby_update()
+            
+            return JsonResponse({
+                'success': True,
+                'character_name': character_name,
+                **serializer.data
+            })
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
+    except LobbyPlayer.DoesNotExist:
+        return JsonResponse({'error': 'Player not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+def get_lobby(request, lobby_id):
+    try:
+        lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
+        serializer = LobbySerializer(lobby)
+        return JsonResponse(serializer.data)
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 

@@ -42,10 +42,16 @@ class PlayerSerializer(serializers.ModelSerializer):
 
 class LobbyPlayerSerializer(serializers.ModelSerializer):
     character_card = CardSerializer(read_only=True)
+    character_name = serializers.SerializerMethodField()
     
     class Meta:
         model = LobbyPlayer
-        fields = ['id', 'created_at', 'character_card']
+        fields = ['id', 'created_at', 'character_card', 'character_name']
+    
+    def get_character_name(self, obj):
+        if obj.character_card:
+            return obj.character_card.name
+        return None
 
 class LobbySerializer(serializers.ModelSerializer):
     players = LobbyPlayerSerializer(source='lobby_players', many=True, read_only=True)

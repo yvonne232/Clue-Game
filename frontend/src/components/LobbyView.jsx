@@ -1,12 +1,14 @@
 // frontend/src/components/LobbyView.jsx
-import React, { useState, useEffect } from 'react';
-import useWebSocket from '../hooks/useWebSocket';
+import React, { useState, useEffect, useCallback } from 'react';
+import CharacterSelect from './CharacterSelect';
+
+const POLLING_INTERVAL = 1000; // Poll every 1 second
 
 export default function LobbyView() {
   const [lobbies, setLobbies] = useState([]);
   const [newLobbyName, setNewLobbyName] = useState('');
   const [currentLobby, setCurrentLobby] = useState(null);
-  const { messages, sendMessage } = useWebSocket();
+  const [error, setError] = useState(null);
   
   useEffect(() => {
     // Check if player exists and create one if not
@@ -16,10 +18,60 @@ export default function LobbyView() {
     }
   }, []);
   
-  // Fetch lobbies on component mount
+  // Polling function for current lobby
+  const pollCurrentLobby = useCallback(async () => {
+    if (!currentLobby) return;
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/`);
+      const data = await response.json();
+      
+      if (data.error) {
+        console.error('Error polling lobby:', data.error);
+        return;
+      }
+      
+      // Only update if there are actual changes
+      if (JSON.stringify(data) !== JSON.stringify(currentLobby)) {
+        setCurrentLobby(data);
+      }
+    } catch (error) {
+      console.error('Error polling current lobby:', error);
+    }
+  }, [currentLobby]);
+
+  // Polling function for lobby list
+  const pollLobbies = useCallback(async () => {
+    if (currentLobby) return; // Don't poll lobby list if in a lobby
+    try {
+      const response = await fetch('http://127.0.0.1:8000/api/lobbies/');
+      const data = await response.json();
+      
+      // Only update if there are actual changes
+      if (JSON.stringify(data.lobbies) !== JSON.stringify(lobbies)) {
+        setLobbies(data.lobbies);
+      }
+    } catch (error) {
+      console.error('Error polling lobbies:', error);
+    }
+  }, [lobbies, currentLobby]);
+
+  // Set up polling intervals
   useEffect(() => {
-    fetchLobbies();
-  }, []);
+    // Initial fetch
+    if (!currentLobby) {
+      fetchLobbies();
+    }
+
+    // Set up polling intervals
+    const lobbyListInterval = setInterval(pollLobbies, POLLING_INTERVAL);
+    const currentLobbyInterval = setInterval(pollCurrentLobby, POLLING_INTERVAL);
+
+    // Cleanup intervals on unmount
+    return () => {
+      clearInterval(lobbyListInterval);
+      clearInterval(currentLobbyInterval);
+    };
+  }, [pollLobbies, pollCurrentLobby]);
 
   const fetchLobbies = async () => {
     try {
@@ -164,6 +216,13 @@ export default function LobbyView() {
 
   return (
     <div className="lobby-container">
+      {error && (
+        <div className="error-message">
+          {error}
+          <button onClick={() => setError(null)}>Dismiss</button>
+        </div>
+      )}
+      
       {!currentLobby ? (
         <>
           <div className="create-lobby">
@@ -192,13 +251,35 @@ export default function LobbyView() {
           <h2>Lobby: {currentLobby.name}</h2>
           <div className="player-list">
             <h3>Players: {currentLobby.player_count}</h3>
+            <div className="current-player-info">
+              Your Player ID: {localStorage.getItem('playerId')}
+            </div>
             {currentLobby.players.map(player => (
-              <div key={player.id} className="player-item">
+              <div 
+                key={player.id} 
+                className={`player-item ${player.id === localStorage.getItem('playerId') ? 'current-player' : ''}`}
+              >
                 Player {player.id}
+                {player.character_name && <span className="player-character"> - {player.character_name}</span>}
+                {player.id === localStorage.getItem('playerId') && <span className="current-player-badge"> (You)</span>}
               </div>
             ))}
           </div>
-          <button onClick={leaveLobby}>Leave Lobby</button>
+          <CharacterSelect 
+            lobbyId={currentLobby.id}
+            onCharacterSelected={(characterData) => {
+              // Update the current lobby with the new character selection
+              setCurrentLobby(prevLobby => ({
+                ...prevLobby,
+                players: prevLobby.players.map(player => 
+                  player.id === localStorage.getItem('playerId')
+                    ? { ...player, character_name: characterData.character_name }
+                    : player
+                )
+              }));
+            }}
+          />
+          <button onClick={leaveLobby} className="leave-button">Leave Lobby</button>
         </div>
       )}
     </div>
