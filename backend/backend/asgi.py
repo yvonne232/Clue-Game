@@ -8,16 +8,19 @@ https://docs.djangoproject.com/en/4.2/howto/deployment/asgi/
 """
 
 import os
+
+# Set the Django settings module path before any other imports
+os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
+
+import django
+django.setup()
+
 from django.core.asgi import get_asgi_application
 from channels.routing import ProtocolTypeRouter, URLRouter
 from channels.auth import AuthMiddlewareStack
-import realtime.routing  # Import WebSocket routes
 import game.routing
 
-os.environ.setdefault("DJANGO_SETTINGS_MODULE", "backend.settings")
-
-
-# Default Django ASGI app (normal HTTP)
+# Initialize Django ASGI application early to ensure the app is loaded
 django_asgi_app = get_asgi_application()
 
 application = ProtocolTypeRouter({

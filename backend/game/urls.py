@@ -12,4 +12,13 @@ urlpatterns = [
     # Player endpoints
     path('players/', views.PlayerListCreateView.as_view(), name='player-list'),
     path('players/<int:pk>/', views.PlayerRetrieveUpdateDeleteView.as_view(), name='player-detail'),
+
+    # Lobby endpoints
+    path('lobbies/', views.list_lobbies, name='lobby-list'),
+    path('lobbies/create/', views.create_lobby, name='lobby-create'),
+    path('lobbies/<int:lobby_id>/join/', views.join_lobby, name='lobby-join'),
+    path('lobbies/<int:lobby_id>/leave/', views.leave_lobby, name='lobby-leave'),
+    
+    # Player endpoints
+    path('player/create/', views.create_player, name='player-create'),
 ]

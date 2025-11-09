@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import "./App.css";
 import useWebSocket from "./hooks/useWebSocket";
+import LobbyView from './components/LobbyView';
 import GameFeed from "./components/GameFeed";
 
 const defaultApiBase = `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -103,6 +104,7 @@ export default function App() {
           </div>
         )}
       </div>
+      <LobbyView />
       <GameFeed messages={messages} />
     </div>
   );

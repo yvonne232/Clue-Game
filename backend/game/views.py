@@ -7,9 +7,244 @@ from rest_framework.views import APIView
 from django.db import transaction, OperationalError
 
 from .models import Game, Player, Hallway, Solution
-from .serializers import GameSerializer, PlayerSerializer
+from .models.lobby import Lobby
+from .models.lobby_player import LobbyPlayer
+from .serializers import GameSerializer, PlayerSerializer, LobbySerializer
 from game.game_engine.game_manager import GameManager
 
+from rest_framework.decorators import api_view
+from django.http import JsonResponse
+from .models import Lobby
+from .serializers import LobbySerializer
+
+# ---------------------------
+# LOBBY API VIEWS
+# ---------------------------
+
+@api_view(['POST'])
+def create_player(request):
+    try:
+        with transaction.atomic():
+            # Clear any existing players who don't have a valid session
+            old_id = request.data.get('old_player_id')
+            if old_id:
+                try:
+                    old_player = LobbyPlayer.objects.get(id=old_id)
+                    # Check if the old player was in a lobby
+                    old_lobby = old_player.lobby
+                    
+                    # Remove them from their lobby
+                    if old_lobby:
+                        # Remove player from the lobby
+                        old_player.lobby = None
+                        old_player.save()
+                        
+                        # Check if the lobby is now empty
+                        if old_lobby.lobby_players.count() == 0:
+                            old_lobby.is_active = False
+                            old_lobby.save()
+                            
+                except LobbyPlayer.DoesNotExist:
+                    pass
+
+            # Create the new player
+            player = LobbyPlayer.objects.create()
+            return JsonResponse({
+                'id': player.id
+            })
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+from django.db import transaction
+from django.core.exceptions import ValidationError
+
+@api_view(['POST'])
+def create_lobby(request):
+    try:
+        name = request.data.get('name')
+        player_id = request.data.get('player_id')
+        
+        with transaction.atomic():
+            # First, get the player and ensure they're not in another lobby
+            player = LobbyPlayer.objects.get(id=player_id)
+            if player.lobby is not None:
+                return JsonResponse({
+                    'error': 'Player is already in another lobby'
+                }, status=400)
+            
+            # Create the lobby
+            lobby = Lobby.objects.create(name=name)
+            
+            # Add the player to the lobby
+            player.lobby = lobby
+            player.save()
+            
+            # Re-fetch the lobby with players
+            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby.id)
+            print(f"Player count: {lobby.lobby_players.count()}")
+            print(f"Players: {list(lobby.lobby_players.all().values('id', 'lobby_id'))}")
+            
+            serializer = LobbySerializer(lobby)
+            serialized_data = serializer.data
+            print(f"Serialized data: {serialized_data}")
+            return JsonResponse(serialized_data)
+    except LobbyPlayer.DoesNotExist:
+        return JsonResponse({'error': 'Player not found'}, status=404)
+    except ValidationError as e:
+        return JsonResponse({'error': str(e)}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@api_view(['GET'])
+def list_lobbies(request):
+    print("Fetching active lobbies")
+    with transaction.atomic():
+        # Clean up any lobbies that have only disconnected players
+        lobbies = Lobby.objects.filter(is_active=True).prefetch_related('lobby_players')
+        for lobby in lobbies:
+            # Check if any players in this lobby are still connected
+            has_active_players = False
+            current_player_ids = lobby.lobby_players.values_list('id', flat=True)
+            
+            if not current_player_ids:
+                # No players at all, deactivate lobby
+                lobby.is_active = False
+                lobby.save()
+                continue
+                
+            if current_player_ids:
+                # If there are players, lobby stays active
+                has_active_players = True
+            
+            if not has_active_players:
+                lobby.is_active = False
+                lobby.save()
+        
+        # Now get the final list of active lobbies
+        lobbies = Lobby.objects.filter(is_active=True).prefetch_related('lobby_players')
+        
+        # Debug info
+        for lobby in lobbies:
+            print(f"Lobby {lobby.id}:")
+            print(f"  Name: {lobby.name}")
+            print(f"  Player count: {lobby.lobby_players.count()}")
+            print(f"  Players: {list(lobby.lobby_players.all().values('id', 'lobby_id'))}")
+        
+        serializer = LobbySerializer(lobbies, many=True)
+        response_data = {"lobbies": serializer.data}
+        print(f"Response data: {response_data}")
+        return JsonResponse(response_data)
+
+@api_view(['POST'])
+def join_lobby(request, lobby_id):
+    print(f"Attempting to join lobby {lobby_id}")
+    print(f"Request data: {request.data}")
+    
+    try:
+        with transaction.atomic():
+            try:
+                lobby = Lobby.objects.get(id=lobby_id)
+                print(f"Found lobby: {lobby}")
+            except Lobby.DoesNotExist:
+                print(f"Lobby {lobby_id} not found")
+                return JsonResponse({
+                    'error': f'Lobby {lobby_id} not found'
+                }, status=404)
+            
+            player_id = request.data.get('player_id')
+            if not player_id:
+                print("No player_id provided")
+                return JsonResponse({
+                    'error': 'player_id is required'
+                }, status=400)
+            
+            try:
+                # Get the player and check if they're already in a lobby
+                player = LobbyPlayer.objects.get(id=player_id)
+                print(f"Found player: {player}")
+            except LobbyPlayer.DoesNotExist:
+                print(f"Player {player_id} not found")
+                return JsonResponse({
+                    'error': f'Player {player_id} not found'
+                }, status=404)
+            
+            if player.lobby is not None:
+                # If they're trying to join the same lobby they're already in, just return the lobby data
+                if player.lobby.id == lobby.id:
+                    print(f"Player {player_id} is rejoining their previous lobby {lobby.id}")
+                    serializer = LobbySerializer(lobby)
+                    return JsonResponse(serializer.data)
+                else:
+                    print(f"Player {player_id} is already in another lobby {player.lobby.id}")
+                    return JsonResponse({
+                        'error': 'Player is already in another lobby'
+                    }, status=400)
+            
+            # Check if lobby is full
+            current_count = lobby.lobby_players.count()
+            print(f"Current players in lobby: {current_count}")
+            if current_count >= 6:
+                print(f"Lobby is full ({current_count}/6)")
+                return JsonResponse({
+                    'error': 'Lobby is full'
+                }, status=400)
+            
+            # Add player to lobby
+            player.lobby = lobby
+            player.save()
+            print(f"Added player {player_id} to lobby {lobby_id}")
+            
+            # Re-fetch the lobby with players
+            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby.id)
+            print(f"Player count after join: {lobby.lobby_players.count()}")
+            print(f"Players in lobby: {list(lobby.lobby_players.all().values('id', 'lobby_id'))}")
+            
+            serializer = LobbySerializer(lobby)
+            response_data = serializer.data
+            print(f"Response data: {response_data}")
+            return JsonResponse(response_data)
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
+    except LobbyPlayer.DoesNotExist:
+        return JsonResponse({'error': 'Player not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+def leave_lobby(request, lobby_id):
+    try:
+        with transaction.atomic():
+            lobby = Lobby.objects.get(id=lobby_id)
+            player_id = request.data.get('player_id')
+            
+            # Get the player and remove them from the lobby
+            player = LobbyPlayer.objects.get(id=player_id)
+            if player.lobby_id != lobby.id:
+                return JsonResponse({
+                    'error': 'Player is not in this lobby'
+                }, status=400)
+            
+            # Remove player from lobby
+            player.lobby = None
+            player.save()
+            
+            # Re-fetch the lobby
+            lobby.refresh_from_db()
+            
+            # Check if lobby is empty
+            if lobby.lobby_players.count() == 0:
+                lobby.is_active = False
+                lobby.save()
+                return JsonResponse({'message': 'Lobby closed', 'success': True})
+            
+            serializer = LobbySerializer(lobby)
+            return JsonResponse({'success': True, **serializer.data})
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
+    except LobbyPlayer.DoesNotExist:
+        return JsonResponse({'error': 'Player not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
 
 # ---------------------------
 # GAME API VIEWS
