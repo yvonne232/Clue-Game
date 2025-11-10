@@ -386,6 +386,78 @@ def get_lobby(request, lobby_id):
 def start_game(request, lobby_id):
     try:
         with transaction.atomic():
+            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
+            players = lobby.lobby_players.all()
+            
+            # Validate player count
+            if players.count() < 2 or players.count() > 6:
+                return JsonResponse({
+                    'error': 'Game requires 2-6 players'
+                }, status=400)
+            
+            # Validate all players have selected characters
+            unready_players = players.filter(character_card__isnull=True)
+            if unready_players.exists():
+                return JsonResponse({
+                    'error': 'All players must select characters'
+                }, status=400)
+            
+            # Lock the lobby
+            lobby.status = 'in_game'
+            lobby.save()
+            
+            # Create the game and initialize the game state
+            game_name = f"lobby_{lobby_id}"
+            Game.objects.filter(name=game_name).delete()
+            Player.objects.filter(game__name=game_name).delete()
+            Solution.objects.all().delete()
+            
+            # Reset hallway occupancy
+            Hallway.objects.all().update(is_occupied=False)
+            
+            # Initialize game with lobby players
+            manager = GameManager(game_name=game_name, lobby_players=players)
+            
+            # Broadcast game start via websocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"game_{lobby_id}",
+                {
+                    "type": "game_message",
+                    "message": {
+                        "type": "game.started",
+                        "gameStarted": True,
+                        "game_state": {
+                            "players": [
+                                {
+                                    "name": p["name"],
+                                    "location": p["location"].name if p["location"] else None,
+                                    "hand": p["hand"],
+                                    "eliminated": p["eliminated"]
+                                } for p in manager.players
+                            ],
+                            "current_player": manager.game.current_player.character_card.name if manager.game.current_player else None,
+                            "is_completed": manager.game.is_completed,
+                            "is_active": manager.game.is_active
+                        }
+                    }
+                }
+            )
+            
+            return JsonResponse({
+                "status": "success",
+                "message": "Game started successfully",
+                "game_id": manager.game.id
+            })
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
+@api_view(['POST'])
+def start_game(request, lobby_id):
+    try:
+        with transaction.atomic():
             # Get the lobby and validate it has at least 2 players
             lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
             players = lobby.lobby_players.all()

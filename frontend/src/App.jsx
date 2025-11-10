@@ -1,7 +1,9 @@
 import React, { useState } from "react";
+import { BrowserRouter as Router, Routes, Route, Navigate } from "react-router-dom";
 import "./App.css";
 import useWebSocket from "./hooks/useWebSocket";
 import LobbyView from './components/LobbyView';
+import GameView from './components/GameView';
 import GameFeed from "./components/GameFeed";
 
 const defaultApiBase = `${window.location.protocol}//${window.location.hostname}:8000`;
@@ -73,40 +75,15 @@ export default function App() {
   };
 
   return (
-    <div className="app-root">
-      <div className="controls">
-        <h1>Clue-Less Multiplayer Simulation</h1>
-        <div className="button-row">
-          <button
-            onClick={async () => {
-              try {
-                await resetGame();
-              } catch {
-                // error already recorded
-              }
-            }}
-            disabled={isResetting || isRunning}
-          >
-            {isResetting ? "Resetting…" : "Reset Game"}
-          </button>
-          <button
-            onClick={() => triggerSimulation()}
-            disabled={isRunning || isResetting}
-          >
-            {isRunning ? "Running…" : "Run Simulation"}
-          </button>
-        </div>
-        {error && <p className="status error">{error}</p>}
-        {result && (
-          <div className="status success">
-            <p>Winner: {result.winner || "No winner yet"}</p>
-            <p>Rounds Played: {result.rounds_played}</p>
-          </div>
-        )}
+    <Router>
+      <div className="app-root">
+        <Routes>
+          <Route path="/" element={<LobbyView />} />
+          <Route path="/game/:lobbyId" element={<GameView />} />
+          <Route path="*" element={<Navigate to="/" />} />
+        </Routes>
       </div>
-      <LobbyView />
-      <GameFeed messages={messages} />
-    </div>
+    </Router>
   );
 }
 

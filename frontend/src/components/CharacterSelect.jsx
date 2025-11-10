@@ -116,6 +116,28 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
         }
     };
 
+    const startGame = async () => {
+        try {
+            const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${lobbyId}/start/`, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                }
+            });
+
+            if (!response.ok) {
+                const error = await response.json();
+                throw new Error(error.message || 'Failed to start game');
+            }
+
+            const data = await response.json();
+            // Game start success will be handled by WebSocket update
+        } catch (error) {
+            console.error('Error starting game:', error);
+            setError(error.message || 'Failed to start game');
+        }
+    };
+
     return (
         <div className="character-select">
             <h3>{myCharacter ? 'Your Character' : 'Select Your Character'}</h3>
@@ -144,8 +166,8 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
                     );
                 })}
             </div>
-            {myCharacter && (
-                <div className="character-info">
+            <div className="character-actions">
+                {myCharacter && (
                     <button 
                         className="change-character-btn"
                         onClick={() => {
@@ -156,8 +178,16 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
                     >
                         Change Character
                     </button>
-                </div>
-            )}
+                )}
+                {takenCharacters.length >= 2 && takenCharacters.length <= 6 && (
+                    <button
+                        className="start-game-btn"
+                        onClick={startGame}
+                    >
+                        Start Game ({takenCharacters.length} Players)
+                    </button>
+                )}
+            </div>
         </div>
     );
 }
