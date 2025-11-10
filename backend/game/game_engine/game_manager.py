@@ -30,6 +30,19 @@ class GameManager:
 
             # --- Clear old players for a clean simulation ---
             Player.objects.filter(game=self.game).delete()
+            
+            # --- Clean up any orphaned character cards ---
+            # Get all character cards currently in use by lobby players
+            used_character_cards = Card.objects.filter(
+                lobby_players__isnull=False
+            ).distinct()
+            
+            # Delete character cards that aren't used in any lobby
+            Card.objects.filter(
+                card_type='CHAR'
+            ).exclude(
+                id__in=used_character_cards.values('id')
+            ).delete()
 
             # --- Initialize Deck ---
             # This will ensure all cards exist and are properly loaded
@@ -84,10 +97,16 @@ class GameManager:
                     if self._is_hallway_occupied(hallway):
                         raise RuntimeError(f"Starting hallway for {lobby_player.character_card.name} is already occupied")
 
+                    # Create a game player with a copy of the character card
+                    character_card, _ = Card.objects.get_or_create(
+                        name=lobby_player.character_card.name,
+                        card_type='CHAR'
+                    )
+                    
                     # Create game player
                     player = Player.objects.create(
                         game=self.game,
-                        character_card=lobby_player.character_card,
+                        character_card=character_card,  # Use the new card instance
                         starting_position=start_pos,
                         current_hallway=hallway,
                         current_room=None,

@@ -81,7 +81,7 @@ export default function LobbyView() {
   // Set up WebSocket connection
   useEffect(() => {
     const connectWebSocket = () => {
-      if (!isGameStarted || !currentLobby) return;
+      if (!currentLobby) return;
 
       const ws = new WebSocket(`ws://127.0.0.1:8000/ws/game/${currentLobby.id}`);
       
@@ -94,10 +94,17 @@ export default function LobbyView() {
         const data = JSON.parse(event.data);
         console.log('WebSocket message received:', data);
 
-        switch (data.type) {
-          case 'game_state_update':
-            if (data.game_state.messages) {
-              setMessages(prevMessages => [...prevMessages, ...data.game_state.messages]);
+        switch (data.message.type) {
+          case 'game.started':
+            setIsGameStarted(true);
+            if (data.message.game_state.messages) {
+              setMessages(prevMessages => [...prevMessages, ...data.message.game_state.messages]);
+            }
+            break;
+          default:
+            // For other game messages
+            if (data.message.messages) {
+              setMessages(prevMessages => [...prevMessages, ...data.message.messages]);
             }
             break;
         }
@@ -318,11 +325,9 @@ export default function LobbyView() {
         return;
       }
 
-      // Add initial game message
-      setMessages([`Game started! Game ID: ${data.game_id}`]);
+      // The WebSocket message will handle the game messages
       
-      // Set game as started which will trigger WebSocket connection
-      setIsGameStarted(true);
+      // The WebSocket message will handle setting isGameStarted to true
 
     } catch (error) {
       console.error('Error starting game:', error);
