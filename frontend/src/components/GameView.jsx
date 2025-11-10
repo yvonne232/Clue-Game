@@ -2,10 +2,10 @@ import React, { useState, useEffect } from 'react';
 import useWebSocket from '../hooks/useWebSocket';
 import '../styles/game.css';
 
-export default function GameView({ gameId }) {
-    const [gameState, setGameState] = useState(null);
-    const [players, setPlayers] = useState([]);
-    const [currentPlayer, setCurrentPlayer] = useState(null);
+export default function GameView({ gameId, initialGameState }) {
+    const [gameState, setGameState] = useState(initialGameState || null);
+    const [players, setPlayers] = useState(initialGameState?.players || []);
+    const [currentPlayer, setCurrentPlayer] = useState(initialGameState?.current_player || null);
     const [myPlayer, setMyPlayer] = useState(null);
     const [isMyTurn, setIsMyTurn] = useState(false);
     const { messages, sendMessage } = useWebSocket(`game/${gameId}`);

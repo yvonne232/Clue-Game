@@ -98,10 +98,18 @@ export default function LobbyView() {
           setError(data.error);
         } else if (data.type === "game_state") {
           console.log("Received game state:", data.game_state);
-          // Set game as started when we receive a game state
+          // Add game state to messages and set game as started
+          setMessages(prevMessages => [...prevMessages, data]);
           setIsGameStarted(true);
         } else if (data.type === "game.started") {
           console.log("Game started message received");
+          // Add game state from game.started message
+          if (data.game_state) {
+            setMessages(prevMessages => [...prevMessages, { 
+              type: 'game_state', 
+              game_state: data.game_state 
+            }]);
+          }
           setIsGameStarted(true);
         } else if (data.message) {
           // Handle both string and object messages
@@ -362,6 +370,7 @@ export default function LobbyView() {
         <GameView 
           gameId={currentLobby.id} 
           messages={messages}
+          initialGameState={messages.find(m => m.type === 'game_state')?.game_state}
         />
       ) : !currentLobby ? (
         <>
