@@ -39,24 +39,43 @@ export default function GameView({ gameId, initialGameState }) {
 
     // Game action handlers
     const handleMakeMove = () => {
-        if (!isMyTurn) return;
+        if (!isMyTurn || myPlayer?.eliminated) return;
+        
+        // Send move request to server
         sendMessage({
-            type: 'make_move'
+            type: 'make_move',
+            player_id: myPlayer.id,
+            character_name: myPlayer.name
         });
     };
 
     const handleSuggestion = () => {
-        if (!isMyTurn) return;
+        if (!isMyTurn || !myPlayer?.location?.includes('Room') || myPlayer?.eliminated) return;
+        
+        // Send suggestion request to server
         sendMessage({
-            type: 'make_suggestion'
+            type: 'make_suggestion',
+            player_id: myPlayer.id,
+            character_name: myPlayer.name,
+            room: myPlayer.location
         });
     };
 
     const handleAccusation = () => {
-        if (!isMyTurn) return;
-        sendMessage({
-            type: 'make_accusation'
-        });
+        if (!isMyTurn || myPlayer?.eliminated) return;
+        
+        // Confirm with player before making accusation
+        const confirmed = window.confirm(
+            "Are you sure you want to make an accusation? If you're wrong, you'll be eliminated from the game!"
+        );
+        
+        if (confirmed) {
+            sendMessage({
+                type: 'make_accusation',
+                player_id: myPlayer.id,
+                character_name: myPlayer.name
+            });
+        }
     };
 
     return (
@@ -101,21 +120,39 @@ export default function GameView({ gameId, initialGameState }) {
                 </div>
             </div>
 
-            {isMyTurn && (
-                <div className="game-controls">
-                    <button onClick={handleMakeMove} className="game-button">
-                        Make Move
-                    </button>
-                    {myPlayer?.location?.includes('Room') && (
-                        <button onClick={handleSuggestion} className="game-button">
-                            Make Suggestion
-                        </button>
-                    )}
-                    <button onClick={handleAccusation} className="game-button warning">
-                        Make Accusation
-                    </button>
-                </div>
-            )}
+            <div className="game-controls">
+                <button 
+                    onClick={handleMakeMove} 
+                    className="game-button"
+                    disabled={!isMyTurn || myPlayer?.eliminated}
+                    title={!isMyTurn ? "Wait for your turn" : 
+                           myPlayer?.eliminated ? "You have been eliminated" : 
+                           "Make a move to an adjacent space"}
+                >
+                    Make Move
+                </button>
+                <button 
+                    onClick={handleSuggestion} 
+                    className="game-button"
+                    disabled={!isMyTurn || !myPlayer?.location?.includes('Room') || myPlayer?.eliminated}
+                    title={!isMyTurn ? "Wait for your turn" : 
+                           !myPlayer?.location?.includes('Room') ? "Must be in a room to make a suggestion" :
+                           myPlayer?.eliminated ? "You have been eliminated" : 
+                           "Make a suggestion about the crime"}
+                >
+                    Make Suggestion
+                </button>
+                <button 
+                    onClick={handleAccusation} 
+                    className="game-button warning"
+                    disabled={!isMyTurn || myPlayer?.eliminated}
+                    title={!isMyTurn ? "Wait for your turn" : 
+                           myPlayer?.eliminated ? "You have been eliminated" :
+                           "Make an accusation - Be careful! If wrong, you'll be eliminated"}
+                >
+                    Make Accusation
+                </button>
+            </div>
 
             <div className="game-messages">
                 {messages.map((msg, index) => (
