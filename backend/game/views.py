@@ -382,6 +382,66 @@ def get_lobby(request, lobby_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
+@api_view(['POST'])
+def start_game(request, lobby_id):
+    try:
+        with transaction.atomic():
+            # Get the lobby and validate it has at least 2 players
+            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
+            players = lobby.lobby_players.all()
+            
+            if len(players) < 2:
+                return JsonResponse({"error": "At least 2 players required to start game"}, status=400)
+
+            # Validate all players have selected characters
+            for player in players:
+                if not player.character_card:
+                    return JsonResponse({"error": "All players must select a character before starting"}, status=400)
+            
+            # Initialize game manager with lobby players
+            manager = GameManager(game_name=f"lobby_{lobby_id}", lobby_players=players)
+            
+            # Mark lobby as in game
+            lobby.status = 'in_game'
+            lobby.save()
+            
+            # Broadcast game start via websocket
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"game_{lobby_id}",  # Changed to match the GameConsumer room name format
+                {
+                    "type": "game_message",  # Changed to match the GameConsumer handler method
+                    "message": {
+                        "type": "game.started",
+                        "gameStarted": True,
+                        "game_state": {
+                            "players": [
+                                {
+                                    "name": p["name"],
+                                    "location": p["location"].name if p["location"] else None,
+                                    "hand": p["hand"],
+                                    "eliminated": p["eliminated"]
+                                } for p in manager.players
+                            ],
+                            "current_player": manager.game.current_player.character_card.name if manager.game.current_player else None,
+                            "is_completed": manager.game.is_completed,
+                            "is_active": manager.game.is_active
+                        }
+                    }
+                }
+            )
+            
+            return JsonResponse({
+                "status": "success",
+                "message": "Game started successfully",
+                "game_id": manager.game.id
+            })
+            
+    except Lobby.DoesNotExist:
+        return JsonResponse({"error": "Lobby not found"}, status=404)
+    except Exception as e:
+        return JsonResponse({"error": str(e)}, status=500)
+
 # ---------------------------
 # GAME API VIEWS
 # ---------------------------

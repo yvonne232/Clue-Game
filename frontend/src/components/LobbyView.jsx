@@ -1,6 +1,8 @@
 // frontend/src/components/LobbyView.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import CharacterSelect from './CharacterSelect';
+import GameFeed from './GameFeed';
+import '../styles/game.css';
 
 const POLLING_INTERVAL = 1000; // Poll every 1 second
 
@@ -9,6 +11,9 @@ export default function LobbyView() {
   const [newLobbyName, setNewLobbyName] = useState('');
   const [currentLobby, setCurrentLobby] = useState(null);
   const [error, setError] = useState(null);
+  const [isGameStarted, setIsGameStarted] = useState(false);
+  const [messages, setMessages] = useState([]);
+  const [socket, setSocket] = useState(null);
   
   useEffect(() => {
     // Check if player exists and create one if not
@@ -16,7 +21,24 @@ export default function LobbyView() {
     if (!playerId) {
       createPlayer();
     }
-  }, []);
+
+    // Set up page unload handler
+    const handleUnload = async () => {
+      if (currentLobby) {
+        // Create a synchronous request to leave the lobby
+        const xhr = new XMLHttpRequest();
+        xhr.open('POST', `http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/leave/`, false); // false makes it synchronous
+        xhr.setRequestHeader('Content-Type', 'application/json');
+        xhr.send(JSON.stringify({ player_id: localStorage.getItem('playerId') }));
+      }
+    };
+
+    window.addEventListener('beforeunload', handleUnload);
+    
+    return () => {
+      window.removeEventListener('beforeunload', handleUnload);
+    };
+  }, [currentLobby]);
   
   // Polling function for current lobby
   const pollCurrentLobby = useCallback(async () => {
@@ -56,13 +78,63 @@ export default function LobbyView() {
   }, [lobbies, currentLobby]);
 
   // Set up polling intervals
+  // Set up WebSocket connection
   useEffect(() => {
+    const connectWebSocket = () => {
+      if (!isGameStarted || !currentLobby) return;
+
+      const ws = new WebSocket(`ws://127.0.0.1:8000/ws/game/${currentLobby.id}`);
+      
+      ws.onopen = () => {
+        console.log('WebSocket connected');
+        setSocket(ws);
+      };
+
+      ws.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        console.log('WebSocket message received:', data);
+
+        switch (data.type) {
+          case 'game_state_update':
+            if (data.game_state.messages) {
+              setMessages(prevMessages => [...prevMessages, ...data.game_state.messages]);
+            }
+            break;
+        }
+      };
+
+      ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setError('WebSocket connection error');
+      };
+
+      ws.onclose = () => {
+        console.log('WebSocket disconnected. Attempting to reconnect...');
+        setTimeout(connectWebSocket, 3000);  // Attempt to reconnect after 3 seconds
+      };
+
+      return ws;
+    };
+
+    const ws = connectWebSocket();
+    
+    return () => {
+      if (ws) {
+        ws.close();
+      }
+    };
+  }, [isGameStarted, currentLobby]); // Only connect when game starts and we have lobby info
+
+  // Handle polling for non-game state
+  useEffect(() => {
+    if (isGameStarted) return; // Don't poll when game is running
+
     // Initial fetch
     if (!currentLobby) {
       fetchLobbies();
     }
 
-    // Set up polling intervals
+    // Set up polling intervals for non-game state
     const lobbyListInterval = setInterval(pollLobbies, POLLING_INTERVAL);
     const currentLobbyInterval = setInterval(pollCurrentLobby, POLLING_INTERVAL);
 
@@ -71,7 +143,7 @@ export default function LobbyView() {
       clearInterval(lobbyListInterval);
       clearInterval(currentLobbyInterval);
     };
-  }, [pollLobbies, pollCurrentLobby]);
+  }, [pollLobbies, pollCurrentLobby, currentLobby, isGameStarted]);
 
   const fetchLobbies = async () => {
     try {
@@ -129,6 +201,14 @@ export default function LobbyView() {
       
       setCurrentLobby(data);
       console.log('Current lobby state:', data);
+      
+      // Join lobby's WebSocket group
+      if (socket) {
+        socket.send(JSON.stringify({
+          type: 'join_lobby',
+          lobby_id: data.id
+        }));
+      }
       fetchLobbies();
     } catch (error) {
       console.error('Error creating lobby:', error);
@@ -183,6 +263,13 @@ export default function LobbyView() {
       });
       const data = await response.json();
       if (data.success) {
+        // Leave lobby's WebSocket group before clearing state
+        if (socket && currentLobby) {
+          socket.send(JSON.stringify({
+            type: 'leave_lobby',
+            lobby_id: currentLobby.id
+          }));
+        }
         setCurrentLobby(null);
         fetchLobbies();
       } else {
@@ -214,6 +301,35 @@ export default function LobbyView() {
     }
   };
 
+  const startGame = async () => {
+    try {
+      if (!currentLobby) return;
+
+      const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/start/`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        }
+      });
+
+      const data = await response.json();
+      if (data.error) {
+        setError(data.error);
+        return;
+      }
+
+      // Add initial game message
+      setMessages([`Game started! Game ID: ${data.game_id}`]);
+      
+      // Set game as started which will trigger WebSocket connection
+      setIsGameStarted(true);
+
+    } catch (error) {
+      console.error('Error starting game:', error);
+      setError('Failed to start game');
+    }
+  };
+
   return (
     <div className="lobby-container">
       {error && (
@@ -222,8 +338,13 @@ export default function LobbyView() {
           <button onClick={() => setError(null)}>Dismiss</button>
         </div>
       )}
-      
-      {!currentLobby ? (
+
+      {isGameStarted ? (
+        <div className="game-container">
+          <h2>Game in Progress</h2>
+          <GameFeed messages={messages} />
+        </div>
+      ) : !currentLobby ? (
         <>
           <div className="create-lobby">
             <h2>Create New Lobby</h2>
@@ -279,7 +400,18 @@ export default function LobbyView() {
               }));
             }}
           />
-          <button onClick={leaveLobby} className="leave-button">Leave Lobby</button>
+          <div className="lobby-controls">
+            <button onClick={leaveLobby} className="leave-button">Leave Lobby</button>
+            {currentLobby.players.length >= 2 && (
+              <button 
+                onClick={startGame} 
+                className="start-button"
+                disabled={currentLobby.players.some(p => !p.character_name)}
+              >
+                Start Game
+              </button>
+            )}
+          </div>
         </div>
       )}
     </div>

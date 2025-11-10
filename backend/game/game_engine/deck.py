@@ -6,16 +6,81 @@ class Deck:
     """Handles loading cards, creating the mystery solution, and dealing hands."""
 
     def __init__(self):
-        """Ensure all cards exist and load them grouped by type."""
+        """Initialize deck by ensuring all required cards exist and loading them."""
+        from game.class_draft.constants import SUSPECTS, WEAPONS, ROOMS
+
+        # Seed cards if they don't exist
+        self._ensure_cards_exist()
+        
+        # Load cards grouped by type
         self.characters = list(Card.objects.filter(card_type="CHAR"))
         self.weapons = list(Card.objects.filter(card_type="WEAP"))
         self.rooms = list(Card.objects.filter(card_type="ROOM"))
 
-        if not (self.characters and self.weapons and self.rooms):
-            raise RuntimeError("❌ Missing cards in database — run migrations to create default cards.")
+        # Verify card counts
+        expected_counts = {
+            'CHAR': len(SUSPECTS),
+            'WEAP': len(WEAPONS),
+            'ROOM': len(ROOMS)
+        }
+        
+        actual_counts = {
+            'CHAR': len(self.characters),
+            'WEAP': len(self.weapons),
+            'ROOM': len(self.rooms)
+        }
+        
+        if any(actual_counts[type] != expected_counts[type] for type in actual_counts):
+            raise RuntimeError(f"Card count mismatch. Expected: {expected_counts}, Got: {actual_counts}")
 
         # Store all cards together for convenience
         self.all_cards = self.characters + self.weapons + self.rooms
+        
+    def _ensure_cards_exist(self):
+        """Ensure all required cards exist in the database."""
+        SUSPECTS = [
+            "Miss Scarlet",
+            "Colonel Mustard",
+            "Mrs. White",
+            "Mr. Green",
+            "Mrs. Peacock",
+            "Professor Plum"
+        ]
+
+        WEAPONS = [
+            "Candlestick",
+            "Knife",
+            "Lead Pipe",
+            "Revolver",
+            "Rope",
+            "Wrench"
+        ]
+
+        ROOMS = [
+            "Kitchen",
+            "Ballroom",
+            "Conservatory",
+            "Dining Room",
+            "Billiard Room",
+            "Library",
+            "Lounge",
+            "Hall",
+            "Study"
+        ]
+        
+        card_data = [
+            (name, 'CHAR') for name in SUSPECTS
+        ] + [
+            (name, 'WEAP') for name in WEAPONS
+        ] + [
+            (name, 'ROOM') for name in ROOMS
+        ]
+
+        for name, card_type in card_data:
+            Card.objects.get_or_create(
+                name=name,
+                defaults={'card_type': card_type}
+            )
 
     # ------------------------------------------------------------
     #  Create or load the mystery solution

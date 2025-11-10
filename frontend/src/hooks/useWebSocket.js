@@ -10,9 +10,9 @@ export default function useWebSocket(roomName = "default") {
     const port = import.meta.env.VITE_WS_PORT || "8000";
     
     // Ensure we're using the correct path based on the roomName
-    const wsPath = roomName === 'lobbies' ? '/ws/lobbies/' : 
-                   roomName === 'player' ? '/ws/player/' :
-                   `/ws/game/${roomName}/`;
+    const wsPath = roomName === 'lobbies' ? '/ws/lobbies' : 
+                   roomName === 'player' ? '/ws/player' :
+                   `/ws/game/${roomName}`;
                    
     console.log(`Connecting to WebSocket: ${protocol}://${host}:${port}${wsPath}`);
     const socket = new WebSocket(`${protocol}://${host}:${port}${wsPath}`);
