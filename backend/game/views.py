@@ -29,32 +29,46 @@ def create_player(request):
         with transaction.atomic():
             # Clear any existing players who don't have a valid session
             old_id = request.data.get('old_player_id')
+            old_player = None
+
             if old_id:
                 try:
                     old_player = LobbyPlayer.objects.get(id=old_id)
+                    print(f"Found old player with ID: {old_id}")
                     # Check if the old player was in a lobby
                     old_lobby = old_player.lobby
                     
                     # Remove them from their lobby
                     if old_lobby:
+                        print(f"Removing player {old_id} from lobby {old_lobby.id}")
                         # Remove player from the lobby
                         old_player.lobby = None
                         old_player.save()
                         
                         # Check if the lobby is now empty
                         if old_lobby.lobby_players.count() == 0:
+                            print(f"Lobby {old_lobby.id} is now empty, deactivating")
                             old_lobby.is_active = False
                             old_lobby.save()
                             
                 except LobbyPlayer.DoesNotExist:
-                    pass
+                    print(f"Old player with ID {old_id} not found, will create new player")
+                    old_player = None
 
-            # Create the new player
-            player = LobbyPlayer.objects.create()
+            # Create new player if we didn't find an old one
+            if old_player:
+                print(f"Reusing existing player: {old_player.id}")
+                player = old_player
+            else:
+                print("Creating new player")
+                player = LobbyPlayer.objects.create()
+                print(f"Created new player with ID: {player.id}")
+
             return JsonResponse({
                 'id': player.id
             })
     except Exception as e:
+        print(f"Error in create_player: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
 from django.db import transaction
@@ -193,6 +207,28 @@ def join_lobby(request, lobby_id):
     
     try:
         with transaction.atomic():
+            # First, handle player creation/retrieval
+            player_id = request.data.get('player_id')
+            if not player_id:
+                print("No player_id provided")
+                return JsonResponse({
+                    'error': 'player_id is required'
+                }, status=400)
+
+            try:
+                player = LobbyPlayer.objects.get(id=player_id)
+                print(f"Found existing player: {player.id}")
+            except LobbyPlayer.DoesNotExist:
+                # Auto-create player if not found
+                print(f"Player {player_id} not found, creating new player")
+                player = LobbyPlayer.objects.create()
+                print(f"Created new player with ID: {player.id}")
+                return JsonResponse({
+                    'new_player_id': player.id,
+                    'message': 'New player created. Please retry joining with the new player ID.'
+                })
+
+            # Now handle lobby joining
             try:
                 lobby = Lobby.objects.get(id=lobby_id)
                 print(f"Found lobby: {lobby}")
@@ -200,23 +236,6 @@ def join_lobby(request, lobby_id):
                 print(f"Lobby {lobby_id} not found")
                 return JsonResponse({
                     'error': f'Lobby {lobby_id} not found'
-                }, status=404)
-            
-            player_id = request.data.get('player_id')
-            if not player_id:
-                print("No player_id provided")
-                return JsonResponse({
-                    'error': 'player_id is required'
-                }, status=400)
-            
-            try:
-                # Get the player and check if they're already in a lobby
-                player = LobbyPlayer.objects.get(id=player_id)
-                print(f"Found player: {player}")
-            except LobbyPlayer.DoesNotExist:
-                print(f"Player {player_id} not found")
-                return JsonResponse({
-                    'error': f'Player {player_id} not found'
                 }, status=404)
             
             if player.lobby is not None:
@@ -420,26 +439,30 @@ def start_game(request, lobby_id):
             
             # Broadcast game start via websocket
             channel_layer = get_channel_layer()
+            
+            # Get initial game state
+            game_state = {
+                "players": [
+                    {
+                        "id": player["player_obj"].id,  # Make sure to include player ID
+                        "name": player["name"],
+                        "location": player["location"].name if player["location"] else None,
+                        "hand": player["hand"],
+                        "eliminated": player["eliminated"]
+                    } for player in manager.players
+                ],
+                "current_player": manager.game.current_player.character_name if manager.game.current_player else None,
+                "is_completed": manager.game.is_completed,
+                "is_active": manager.game.is_active
+            }
+            
             async_to_sync(channel_layer.group_send)(
                 f"game_{lobby_id}",
                 {
                     "type": "game_message",
                     "message": {
-                        "type": "game.started",
-                        "gameStarted": True,
-                        "game_state": {
-                            "players": [
-                                {
-                                    "name": p["name"],
-                                    "location": p["location"].name if p["location"] else None,
-                                    "hand": p["hand"],
-                                    "eliminated": p["eliminated"]
-                                } for p in manager.players
-                            ],
-                            "current_player": manager.game.current_player.character_card.name if manager.game.current_player else None,
-                            "is_completed": manager.game.is_completed,
-                            "is_active": manager.game.is_active
-                        }
+                        "type": "game_state",  # Changed to directly send game_state type
+                        "game_state": game_state
                     }
                 }
             )
@@ -495,7 +518,7 @@ def start_game(request, lobby_id):
                                     "eliminated": p["eliminated"]
                                 } for p in manager.players
                             ],
-                            "current_player": manager.game.current_player.character_card.name if manager.game.current_player else None,
+                            "current_player": manager.game.current_player.character_name if manager.game.current_player else None,
                             "is_completed": manager.game.is_completed,
                             "is_active": manager.game.is_active
                         }
@@ -658,19 +681,18 @@ class GameStateView(APIView):
                 status=status.HTTP_404_NOT_FOUND,
             )
 
-        players = game.players.select_related("character_card", "current_room")
+        players = game.players.select_related("current_room")
         payload = []
         for player in players:
             location = player.current_room.name if player.current_room else "Hallway"
             payload.append(
                 {
                     "id": player.id,
-                    "character": player.character_card.name if player.character_card else None,
+                    "character": player.character_name,
                     "location": location,
                     "eliminated": player.is_eliminated,
                 }
-            )
-
+            )        
         return Response(
             {
                 "game": game.name,

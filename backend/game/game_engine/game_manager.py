@@ -30,19 +30,6 @@ class GameManager:
 
             # --- Clear old players for a clean simulation ---
             Player.objects.filter(game=self.game).delete()
-            
-            # --- Clean up any orphaned character cards ---
-            # Get all character cards currently in use by lobby players
-            used_character_cards = Card.objects.filter(
-                lobby_players__isnull=False
-            ).distinct()
-            
-            # Delete character cards that aren't used in any lobby
-            Card.objects.filter(
-                card_type='CHAR'
-            ).exclude(
-                id__in=used_character_cards.values('id')
-            ).delete()
 
             # --- Initialize Deck ---
             # This will ensure all cards exist and are properly loaded
@@ -97,16 +84,10 @@ class GameManager:
                     if self._is_hallway_occupied(hallway):
                         raise RuntimeError(f"Starting hallway for {lobby_player.character_card.name} is already occupied")
 
-                    # Create a game player with a copy of the character card
-                    character_card, _ = Card.objects.get_or_create(
-                        name=lobby_player.character_card.name,
-                        card_type='CHAR'
-                    )
-                    
-                    # Create game player
+                    # Create game player using character name
                     player = Player.objects.create(
                         game=self.game,
-                        character_card=character_card,  # Use the new card instance
+                        character_name=lobby_player.character_card.name,
                         starting_position=start_pos,
                         current_hallway=hallway,
                         current_room=None,
@@ -189,6 +170,18 @@ class GameManager:
             self.is_over = False
             self.winner = None
             self.rounds_played = 0
+
+            # Set Miss Scarlet as the first player
+            first_player = next((p for p in self.players if p["name"] == "Miss Scarlet"), None)
+            if not first_player:
+                first_player = self.players[0]  # fallback if Miss Scarlet is not in game
+            
+            # Update game state with first player
+            Game.objects.filter(pk=self.game.pk).update(current_player=first_player["player_obj"])
+            self.game.current_player = first_player["player_obj"]
+            first_player["player_obj"].is_active_turn = True
+            first_player["player_obj"].save()
+            Notifier.broadcast(f"🎯 {first_player['name']} will go first!")
 
             Notifier.broadcast("✅ Game initialized successfully!")
             

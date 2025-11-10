@@ -2,70 +2,8 @@ import json
 from channels.generic.websocket import AsyncWebsocketConsumer
 from channels.db import database_sync_to_async
 from .models.lobby_player import LobbyPlayer
-# from .models.lobby import Lobby
-# from .serializers import LobbySerializer
-
-# class LobbyConsumer(AsyncWebsocketConsumer):
-#     async def connect(self):
-#         await self.accept()
-#         await self.channel_layer.group_add("lobbies", self.channel_name)
-#         # Send initial lobby list
-#         await self.send_lobby_update()
-
-#     async def disconnect(self, close_code):
-#         await self.channel_layer.group_discard("lobbies", self.channel_name)
-
-#     async def receive(self, text_data):
-#         try:
-#             data = json.loads(text_data)
-#             print(f"Received WebSocket message: {data}")
-            
-#             if data['type'] == 'lobby_action':
-#                 # Handle lobby actions (create, join, leave)
-#                 action = data.get('action')
-#                 if action in ['create', 'join', 'leave']:
-#                     # Broadcast lobby update to all clients
-#                     await self.channel_layer.group_send(
-#                         "lobbies",
-#                         {
-#                             "type": "send_lobby_update",
-#                         }
-#                     )
-#             elif data['type'] == 'get_lobbies':
-#                 # Send current lobby state to requesting client
-#                 await self.send_lobby_update()
-#             elif data['type'] == 'ping':
-#                 await self.send(text_data=json.dumps({
-#                     'type': 'pong'
-#                 }))
-                
-#             # After any message, send updated lobby state
-#             await self.send_lobby_update()
-            
-#         except json.JSONDecodeError as e:
-#             print(f"Error parsing WebSocket message: {e}")
-#             pass
-
-#     async def send_lobby_update(self, event=None):
-#         """Send updated lobby list to all connected clients"""
-#         try:
-#             print("Fetching lobbies for WebSocket update")
-#             lobbies = await self.get_lobbies()
-#             message = {
-#                 'type': 'lobby_update',
-#                 'lobbies': lobbies
-#             }
-#             print(f"Sending lobby update via WebSocket: {message}")
-#             await self.send(text_data=json.dumps(message))
-#         except Exception as e:
-#             print(f"Error sending lobby update via WebSocket: {e}")
-
-#     @database_sync_to_async
-#     def get_lobbies(self):
-#         """Get all active lobbies with their players"""
-#         lobbies = Lobby.objects.filter(is_active=True).prefetch_related('lobby_players')
-#         serializer = LobbySerializer(lobbies, many=True)
-#         return serializer.data
+from .models.game import Game
+from django.db.models import Q
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -73,21 +11,155 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f"game_{self.room_name}"
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
-        await self.send(text_data=json.dumps({"message": f"Connected to {self.room_name}"}))
+        
+        # Send initial game state
+        game_state = await self.get_game_state()
+        if game_state:
+            await self.send(text_data=json.dumps({
+                "type": "game_state",
+                "game_state": game_state
+            }))
 
     async def disconnect(self, close_code):
+        # Clean up the room if this was a server shutdown
+        if close_code == 1001:  # Going away
+            await self.cleanup_room()
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
+    
+    @database_sync_to_async
+    def cleanup_room(self):
+        """Clean up the room and associated players when server disconnects"""
+        try:
+            room_id = self.room_name
+            # Clean up any lobbies and players associated with this room
+            from game.models.lobby import Lobby
+            from game.models.lobby_player import LobbyPlayer
+            
+            # Get the lobby for this room
+            try:
+                lobby = Lobby.objects.get(id=room_id)
+                # Delete all associated players first
+                LobbyPlayer.objects.filter(lobby=lobby).delete()
+                # Then delete the lobby
+                lobby.delete()
+            except Lobby.DoesNotExist:
+                pass
+        except Exception as e:
+            print(f"Error during room cleanup: {e}")
 
     async def receive(self, text_data):
         data = json.loads(text_data)
-        msg = data.get("message", "")
-        await self.channel_layer.group_send(
-            self.room_group_name,
-            {"type": "game_message", "message": msg},
-        )
+        msg_type = data.get("type")
+
+        if msg_type in ["make_move", "make_suggestion", "make_accusation"]:
+            # Handle game actions
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "game_message",
+                    "message": {
+                        "type": msg_type,
+                        "player_id": data.get("player_id")
+                    }
+                }
+            )
+
+            # Update game state after action
+            game_state = await self.get_game_state()
+            if game_state:
+                await self.send(text_data=json.dumps({
+                    "type": "game_state",
+                    "game_state": game_state
+                }))
 
     async def game_message(self, event):
-        await self.send(text_data=json.dumps({"message": event["message"]}))
+        print(f"Game message received: {event}")  # Debug log
+        
+        # Ensure we have a message in the event
+        if "message" not in event:
+            print(f"Warning: No message in event {event}")  # Debug log
+            return
+            
+        message = event["message"]
+        print(f"Processing message: {message}")  # Debug log
+            
+        try:
+            # Handle game started messages
+            if isinstance(message, dict) and message.get("type") == "game.started":
+                game_state = message.get("game_state", {})
+                print(f"Sending game state: {game_state}")  # Debug log
+                await self.send(text_data=json.dumps({
+                    "type": "game_state",
+                    "game_state": game_state
+                }))
+            
+            # Handle game state messages
+            elif isinstance(message, dict) and message.get("type") == "game_state":
+                print(f"Sending direct game state: {message}")  # Debug log
+                await self.send(text_data=json.dumps({
+                    "type": "game_state",
+                    "game_state": message.get("game_state", {})
+                }))
+            
+            # Handle other dictionary messages
+            elif isinstance(message, dict):
+                print(f"Sending dict message: {message}")  # Debug log
+                await self.send(text_data=json.dumps({
+                    "type": message.get("type", "game_message"),
+                    "message": message
+                }))
+            
+            # Handle string or other messages
+            else:
+                print(f"Sending simple message: {message}")  # Debug log
+                await self.send(text_data=json.dumps({
+                    "type": "game_message",
+                    "message": message
+                }))
+                
+        except Exception as e:
+            print(f"Error processing game message: {e}")  # Debug log
+            # Send a basic error message that won't cause frontend issues
+            await self.send(text_data=json.dumps({
+                "type": "error",
+                "message": str(e)
+            }))
+
+    @database_sync_to_async
+    def get_game_state(self):
+        try:
+            # Get game for this lobby
+            game = Game.objects.filter(name=f"lobby_{self.room_name}").first()
+            if not game:
+                return None
+
+            # Get all players in the game
+            players = game.players.select_related('current_room', 'current_hallway')
+            
+            player_states = []
+            for player in players:
+                location = None
+                if player.current_room:
+                    location = player.current_room.name
+                elif player.current_hallway:
+                    location = player.current_hallway.name
+
+                player_states.append({
+                    "id": player.id,
+                    "name": player.character_name,
+                    "location": location,
+                    "eliminated": player.is_eliminated
+                })
+
+            return {
+                "players": player_states,
+                "current_player": game.current_player.character_name if game.current_player else None,
+                "is_completed": game.is_completed,
+                "is_active": game.is_active
+            }
+        except Exception as e:
+            print(f"Error getting game state: {e}")
+            return None
 
 class PlayerConsumer(AsyncWebsocketConsumer):
     async def connect(self):

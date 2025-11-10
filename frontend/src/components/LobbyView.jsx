@@ -1,7 +1,7 @@
 // frontend/src/components/LobbyView.jsx
 import React, { useState, useEffect, useCallback } from 'react';
 import CharacterSelect from './CharacterSelect';
-import GameFeed from './GameFeed';
+import GameView from './GameView';
 import '../styles/game.css';
 
 const POLLING_INTERVAL = 1000; // Poll every 1 second
@@ -93,24 +93,25 @@ export default function LobbyView() {
       ws.onmessage = (event) => {
         const data = JSON.parse(event.data);
         console.log('WebSocket message received:', data);
-
-        switch (data.message.type) {
-          case 'game.started':
-            setIsGameStarted(true);
-            if (data.message.game_state.messages) {
-              setMessages(prevMessages => [...prevMessages, ...data.message.game_state.messages]);
-            }
-            break;
-          default:
-            // For other game messages
-            if (data.message.messages) {
-              setMessages(prevMessages => [...prevMessages, ...data.message.messages]);
-            }
-            break;
+        
+        if (data.error) {
+          setError(data.error);
+        } else if (data.type === "game_state") {
+          console.log("Received game state:", data.game_state);
+          // Set game as started when we receive a game state
+          setIsGameStarted(true);
+        } else if (data.type === "game.started") {
+          console.log("Game started message received");
+          setIsGameStarted(true);
+        } else if (data.message) {
+          // Handle both string and object messages
+          if (typeof data.message === 'string') {
+            setMessages(prevMessages => [...prevMessages, { type: 'info', text: data.message }]);
+          } else {
+            setMessages(prevMessages => [...prevMessages, data.message]);
+          }
         }
-      };
-
-      ws.onerror = (error) => {
+      };      ws.onerror = (error) => {
         console.error('WebSocket error:', error);
         setError('WebSocket connection error');
       };
@@ -245,12 +246,22 @@ export default function LobbyView() {
       
       if (data.error) {
         console.error('Error from server:', data.error);
+        setError(data.error);
         return;
+      }
+      
+      if (data.new_player_id) {
+        // Server created a new player for us
+        console.log('Received new player ID:', data.new_player_id);
+        localStorage.setItem('playerId', data.new_player_id);
+        // Retry joining with new player ID
+        return joinLobby(lobbyId);
       }
       
       setCurrentLobby(data);
     } catch (error) {
       console.error('Error joining lobby:', error);
+      setError('Error joining lobby. Please try again.');
     }
   };
 
@@ -312,6 +323,8 @@ export default function LobbyView() {
     try {
       if (!currentLobby) return;
 
+      console.log('Starting game for lobby:', currentLobby.id);
+      
       const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/start/`, {
         method: 'POST',
         headers: {
@@ -325,9 +338,10 @@ export default function LobbyView() {
         return;
       }
 
-      // The WebSocket message will handle the game messages
+      console.log('Game start response:', data);
       
-      // The WebSocket message will handle setting isGameStarted to true
+      // We'll wait for the WebSocket to confirm game start and update state
+      // The game state will be sent through the WebSocket connection
 
     } catch (error) {
       console.error('Error starting game:', error);
@@ -345,10 +359,10 @@ export default function LobbyView() {
       )}
 
       {isGameStarted ? (
-        <div className="game-container">
-          <h2>Game in Progress</h2>
-          <GameFeed messages={messages} />
-        </div>
+        <GameView 
+          gameId={currentLobby.id} 
+          messages={messages}
+        />
       ) : !currentLobby ? (
         <>
           <div className="create-lobby">

@@ -48,7 +48,7 @@ class GameAdmin(admin.ModelAdmin):
 @admin.register(Player)
 class PlayerAdmin(admin.ModelAdmin):
     list_display = (
-        "character_card",
+        "character_name",
         "game",
         "starting_position",
         "current_room",
@@ -57,9 +57,8 @@ class PlayerAdmin(admin.ModelAdmin):
         "is_eliminated",
     )
     list_filter = ("game", "is_active_turn", "is_eliminated")
-    search_fields = ("character_card__name", "game__name")
+    search_fields = ("character_name", "game__name")
     autocomplete_fields = (
-        "character_card",
         "game",
         "starting_position",
         "current_room",

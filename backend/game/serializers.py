@@ -16,7 +16,6 @@ class CardSerializer(serializers.ModelSerializer):
         fields = ['id', 'name', 'card_type']
 
 class PlayerSerializer(serializers.ModelSerializer):
-    character_card = CardSerializer(read_only=True)
     location = serializers.SerializerMethodField()
 
     class Meta:
@@ -24,7 +23,7 @@ class PlayerSerializer(serializers.ModelSerializer):
         fields = [
             'id', 
             'game', 
-            'character_card',
+            'character_name',
             'current_room',
             'current_hallway',
             'is_active_turn',

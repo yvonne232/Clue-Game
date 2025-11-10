@@ -8,13 +8,10 @@ class Player(models.Model):
         "Game", on_delete=models.CASCADE, related_name="players"
     )
 
-    character_card = models.OneToOneField(
-        "Card",
-        on_delete=models.SET_NULL,
+    character_name = models.CharField(
+        max_length=100,
         null=True,
-        blank=True,
-        limit_choices_to={"card_type": "CHAR"},
-        help_text="Which character this player represents.",
+        help_text="The name of the character this player represents.",
     )
 
     starting_position = models.ForeignKey(
@@ -49,11 +46,11 @@ class Player(models.Model):
     joined_at = models.DateTimeField(auto_now_add=True)
 
     def __str__(self):
-        name = self.character_card.name if self.character_card else f"Player {self.id}"
+        name = self.character_name if self.character_name else f"Player {self.id}"
         return f"{name} ({self.game.name})"
 
     class Meta:
-        unique_together = ("game", "character_card")
+        unique_together = ("game", "character_name")
 
 
 class StartingPosition(models.Model):
