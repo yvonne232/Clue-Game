@@ -1,9 +1,12 @@
 import json
-from channels.generic.websocket import AsyncWebsocketConsumer
+import uuid
+
 from channels.db import database_sync_to_async
-from .models.lobby_player import LobbyPlayer
-from .models.game import Game
-from django.db.models import Q
+from channels.generic.websocket import AsyncWebsocketConsumer
+
+from game.game_engine.session_registry import get_session, remove_session
+from game.models import Game, LobbyPlayer
+
 
 class GameConsumer(AsyncWebsocketConsumer):
     async def connect(self):
@@ -11,193 +14,248 @@ class GameConsumer(AsyncWebsocketConsumer):
         self.room_group_name = f"game_{self.room_name}"
         await self.channel_layer.group_add(self.room_group_name, self.channel_name)
         await self.accept()
-        
-        # Send initial game state
-        game_state = await self.get_game_state()
-        if game_state:
-            await self.send(text_data=json.dumps({
-                "type": "game_state",
-                "game_state": game_state
-            }))
+
+        state = await self.get_game_state()
+        if state:
+            await self.send_json({"type": "game_state", "game_state": state})
 
     async def disconnect(self, close_code):
-        # Clean up the room if this was a server shutdown
-        if close_code == 1001:  # Going away
-            await self.cleanup_room()
         await self.channel_layer.group_discard(self.room_group_name, self.channel_name)
-    
-    @database_sync_to_async
-    def cleanup_room(self):
-        """Clean up the room and associated players when server disconnects"""
-        try:
-            room_id = self.room_name
-            # Clean up any lobbies and players associated with this room
-            from game.models.lobby import Lobby
-            from game.models.lobby_player import LobbyPlayer
-            
-            # Get the lobby for this room
-            try:
-                lobby = Lobby.objects.get(id=room_id)
-                # Delete all associated players first
-                LobbyPlayer.objects.filter(lobby=lobby).delete()
-                # Then delete the lobby
-                lobby.delete()
-            except Lobby.DoesNotExist:
-                pass
-        except Exception as e:
-            print(f"Error during room cleanup: {e}")
 
     async def receive(self, text_data):
         data = json.loads(text_data)
         msg_type = data.get("type")
 
-        if msg_type in ["make_move", "make_suggestion", "make_accusation"]:
-            # Handle game actions
-            await self.channel_layer.group_send(
-                self.room_group_name,
-                {
-                    "type": "game_message",
-                    "message": {
-                        "type": msg_type,
-                        "player_id": data.get("player_id")
-                    }
-                }
+        if msg_type == "make_move":
+            await self._handle_make_move(data)
+        elif msg_type == "make_suggestion":
+            await self._handle_make_suggestion(data)
+        elif msg_type == "make_accusation":
+            await self._handle_make_accusation(data)
+        elif msg_type == "end_turn":
+            await self._handle_end_turn(data)
+        else:
+            await self.send_json(
+                {"type": "error", "message": f"Unsupported action: {msg_type}"}
             )
 
-            # Update game state after action
-            game_state = await self.get_game_state()
-            if game_state:
-                await self.send(text_data=json.dumps({
-                    "type": "game_state",
-                    "game_state": game_state
-                }))
+    async def _handle_make_move(self, data):
+        player_id = data.get("player_id")
+        if player_id is None:
+            await self._send_error("Player ID is required for movement.")
+            return
+
+        result = await self._manager_call(
+            "move_player",
+            player_id=int(player_id),
+            destination_name=data.get("destination"),
+        )
+        if not result.get("success"):
+            await self._send_error(result.get("error", "Unable to move."))
+            return
+
+        if result.get("requires_choice"):
+            payload = {
+                "type": "move_options",
+                "player_id": int(player_id),
+                "options": result.get("options", []),
+                "request_id": result.get("request_id") or str(uuid.uuid4()),
+                "player_name": result.get("player_name"),
+            }
+            await self.send_json(payload)
+            await self._broadcast_game_state()
+            return
+
+        await self._broadcast_game_state()
+
+    async def _handle_make_suggestion(self, data):
+        player_id = data.get("player_id")
+        if player_id is None:
+            await self._send_error("Player ID is required for suggestions.")
+            return
+
+        result = await self._manager_call(
+            "make_suggestion_action",
+            player_id=int(player_id),
+            suspect=data.get("suspect"),
+            weapon=data.get("weapon"),
+        )
+        if not result.get("success"):
+            await self._send_error(result.get("error", "Suggestion failed."))
+            return
+
+        await self._broadcast_game_state()
+
+    async def _handle_make_accusation(self, data):
+        player_id = data.get("player_id")
+        if player_id is None:
+            await self._send_error("Player ID is required for accusations.")
+            return
+
+        result = await self._manager_call(
+            "make_accusation_action",
+            player_id=int(player_id),
+            suspect=data.get("suspect"),
+            weapon=data.get("weapon"),
+            room=data.get("room"),
+        )
+        if not result.get("success"):
+            await self._send_error(result.get("error", "Accusation failed."))
+            return
+
+        await self._broadcast_game_state()
+        if result.get("game_over"):
+            await self._remove_session()
+
+    async def _handle_end_turn(self, data):
+        player_id = data.get("player_id")
+        if player_id is None:
+            await self._send_error("Player ID is required to end a turn.")
+            return
+
+        result = await self._manager_call("end_turn", player_id=int(player_id))
+        if not result.get("success"):
+            await self._send_error(result.get("error", "Unable to end turn."))
+            return
+
+        await self._broadcast_game_state()
+        if result.get("game_over"):
+            await self._remove_session()
+
+    async def _broadcast_game_state(self):
+        state = await self.get_game_state()
+        if not state:
+            return
+        await self.channel_layer.group_send(
+            self.room_group_name,
+            {
+                "type": "forward_game_state",
+                "game_state": state,
+            },
+        )
+
+    async def forward_game_state(self, event):
+        await self.send_json({"type": "game_state", "game_state": event["game_state"]})
 
     async def game_message(self, event):
-        print(f"Game message received: {event}")  # Debug log
-        
-        # Ensure we have a message in the event
-        if "message" not in event:
-            print(f"Warning: No message in event {event}")  # Debug log
+        message = event.get("message")
+        if message is None:
             return
-            
-        message = event["message"]
-        print(f"Processing message: {message}")  # Debug log
-            
-        try:
-            # Handle game started messages
-            if isinstance(message, dict) and message.get("type") == "game.started":
-                game_state = message.get("game_state", {})
-                print(f"Sending game state: {game_state}")  # Debug log
-                await self.send(text_data=json.dumps({
-                    "type": "game_state",
-                    "game_state": game_state
-                }))
-            
-            # Handle game state messages
-            elif isinstance(message, dict) and message.get("type") == "game_state":
-                print(f"Sending direct game state: {message}")  # Debug log
-                await self.send(text_data=json.dumps({
-                    "type": "game_state",
-                    "game_state": message.get("game_state", {})
-                }))
-            
-            # Handle other dictionary messages
-            elif isinstance(message, dict):
-                print(f"Sending dict message: {message}")  # Debug log
-                await self.send(text_data=json.dumps({
-                    "type": message.get("type", "game_message"),
-                    "message": message
-                }))
-            
-            # Handle string or other messages
-            else:
-                print(f"Sending simple message: {message}")  # Debug log
-                await self.send(text_data=json.dumps({
-                    "type": "game_message",
-                    "message": message
-                }))
-                
-        except Exception as e:
-            print(f"Error processing game message: {e}")  # Debug log
-            # Send a basic error message that won't cause frontend issues
-            await self.send(text_data=json.dumps({
-                "type": "error",
-                "message": str(e)
-            }))
+        await self.send_json(
+            {
+                "type": "game_message",
+                "message": message,
+            }
+        )
+
+    async def _send_error(self, message: str):
+        await self.send_json({"type": "error", "message": message})
+
+    async def send_json(self, payload):
+        await self.send(text_data=json.dumps(payload))
+
+    @database_sync_to_async
+    def _manager_call(self, action: str, **kwargs):
+        game_name = f"lobby_{self.room_name}"
+        manager = get_session(game_name)
+        if manager is None:
+            return {"success": False, "error": "Game session is not initialized."}
+        handler = getattr(manager, action, None)
+        if handler is None:
+            return {"success": False, "error": f"Unsupported action '{action}'."}
+        return handler(**kwargs)
+
+    @database_sync_to_async
+    def _remove_session(self):
+        remove_session(f"lobby_{self.room_name}")
 
     @database_sync_to_async
     def get_game_state(self):
-        try:
-            # Get game for this lobby
-            game = Game.objects.filter(name=f"lobby_{self.room_name}").first()
-            if not game:
-                return None
+        game_name = f"lobby_{self.room_name}"
+        manager = get_session(game_name)
+        if manager:
+            return manager.serialize_state()
 
-            # Get all players in the game
-            players = game.players.select_related('current_room', 'current_hallway')
-            
-            player_states = []
-            for player in players:
-                location = None
-                if player.current_room:
-                    location = player.current_room.name
-                elif player.current_hallway:
-                    location = player.current_hallway.name
+        game = Game.objects.filter(name=game_name).first()
+        if not game:
+            return None
 
-                player_states.append({
+        players = game.players.select_related("current_room", "current_hallway")
+        player_states = []
+        for player in players:
+            location = (
+                player.current_room.name
+                if player.current_room
+                else player.current_hallway.name
+                if player.current_hallway
+                else None
+            )
+            player_states.append(
+                {
                     "id": player.id,
                     "name": player.character_name,
                     "location": location,
-                    "eliminated": player.is_eliminated
-                })
+                    "location_type": (
+                        "room"
+                        if player.current_room
+                        else "hallway"
+                        if player.current_hallway
+                        else None
+                    ),
+                    "eliminated": player.is_eliminated,
+                    "arrived_via_suggestion": False,
+                }
+            )
 
-            return {
-                "players": player_states,
-                "current_player": game.current_player.character_name if game.current_player else None,
-                "is_completed": game.is_completed,
-                "is_active": game.is_active
+        current = None
+        if game.current_player:
+            current = {
+                "id": game.current_player.id,
+                "name": game.current_player.character_name,
             }
-        except Exception as e:
-            print(f"Error getting game state: {e}")
-            return None
+
+        return {
+            "players": player_states,
+            "current_player": current,
+            "turn_state": {
+                "has_moved": False,
+                "made_suggestion": False,
+                "has_accused": False,
+            },
+            "is_completed": game.is_completed,
+            "is_active": game.is_active,
+            "winner": None,
+        }
+
 
 class PlayerConsumer(AsyncWebsocketConsumer):
     async def connect(self):
         await self.accept()
-        
-        # Create a new player when a client connects
-        player = await self.create_player()
+        player = await self._create_player()
         self.player_id = player.id
-        
-        # Send the player ID back to the client
-        await self.send(text_data=json.dumps({
-            'type': 'player_created',
-            'player_id': self.player_id,
-            'name': player.name
-        }))
+        await self.send_json(
+            {"type": "player_created", "player_id": self.player_id, "name": player.name}
+        )
 
     async def disconnect(self, close_code):
-        # Clean up player when client disconnects
-        if hasattr(self, 'player_id'):
-            await self.delete_player()
+        if hasattr(self, "player_id"):
+            await self._delete_player()
+
+    async def receive(self, text_data):
+        try:
+            payload = json.loads(text_data)
+        except json.JSONDecodeError:
+            return
+        if payload.get("type") == "ping":
+            await self.send_json({"type": "pong"})
+
+    async def send_json(self, payload):
+        await self.send(text_data=json.dumps(payload))
 
     @database_sync_to_async
-    def create_player(self):
+    def _create_player(self):
         return LobbyPlayer.objects.create()
 
     @database_sync_to_async
-    def delete_player(self):
+    def _delete_player(self):
         LobbyPlayer.objects.filter(id=self.player_id).delete()
-
-    async def receive(self, text_data):
-        # Handle any messages from the client
-        try:
-            text_data_json = json.loads(text_data)
-            message_type = text_data_json.get('type')
-            
-            if message_type == 'ping':
-                await self.send(text_data=json.dumps({
-                    'type': 'pong'
-                }))
-        except json.JSONDecodeError:
-            pass

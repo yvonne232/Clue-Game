@@ -262,6 +262,8 @@ export default function LobbyView() {
         // Server created a new player for us
         console.log('Received new player ID:', data.new_player_id);
         localStorage.setItem('playerId', data.new_player_id);
+        localStorage.removeItem('playerCharacter');
+        localStorage.removeItem('currentGamePlayerId');
         // Retry joining with new player ID
         return joinLobby(lobbyId);
       }
@@ -322,6 +324,8 @@ export default function LobbyView() {
       });
       const data = await response.json();
       localStorage.setItem('playerId', data.id);
+      localStorage.removeItem('playerCharacter');
+      localStorage.removeItem('currentGamePlayerId');
     } catch (error) {
       console.error('Error creating player:', error);
     }

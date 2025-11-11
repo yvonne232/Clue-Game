@@ -152,8 +152,14 @@
   background: #f5f5f5;
   border-radius: 8px;
   display: flex;
-  gap: 10px;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.button-row {
+  display: flex;
   flex-wrap: wrap;
+  gap: 10px;
 }
 
 .game-button {
@@ -171,12 +177,65 @@
   background-color: #45a049;
 }
 
+.game-button.secondary {
+  background-color: #607d8b;
+}
+
+.game-button.secondary:hover {
+  background-color: #546a79;
+}
+
 .game-button.warning {
   background-color: #f44336;
 }
 
 .game-button.warning:hover {
   background-color: #da190b;
+}
+
+.game-button.movement {
+  background-color: #3f51b5;
+}
+
+.game-button.movement:hover {
+  background-color: #35449b;
+}
+
+.game-button.movement:disabled {
+  background-color: #9fa8da;
+  cursor: default;
+}
+
+.action-form {
+  background: #fff;
+  border-radius: 6px;
+  padding: 15px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+}
+
+.action-form h4 {
+  margin: 0 0 10px;
+}
+
+.action-form label {
+  display: block;
+  font-weight: 600;
+  margin-top: 10px;
+}
+
+.action-form select {
+  width: 100%;
+  margin-top: 4px;
+  padding: 6px 8px;
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  font-size: 0.95rem;
+  background: #fafafa;
+}
+
+.action-form select:disabled {
+  background: #eee;
+  cursor: not-allowed;
 }
 
 .your-turn {
@@ -204,6 +263,16 @@
 .game-message {
   padding: 8px;
   border-bottom: 1px solid #eee;
+}
+
+.game-message.error {
+  color: #d32f2f;
+  font-weight: 600;
+}
+
+.game-message.placeholder {
+  color: #999;
+  font-style: italic;
 }
 
 .game-message:last-child {

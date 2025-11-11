@@ -5,6 +5,9 @@ export default function useWebSocket(roomName = "default") {
   const socketRef = useRef(null);
 
   useEffect(() => {
+    if (!roomName) {
+      return;
+    }
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     const host = import.meta.env.VITE_WS_HOST || window.location.hostname;
     const port = import.meta.env.VITE_WS_PORT || "8000";
@@ -28,12 +31,16 @@ export default function useWebSocket(roomName = "default") {
     
     socket.onmessage = (e) => {
       const data = JSON.parse(e.data);
-      if (data.type === 'lobby_update') {
-        setMessages((prev) => [...prev, JSON.stringify(data)]);
-      } else if (data.message) {
-        setMessages((prev) => [...prev, data.message]);
+      let normalized = data;
+
+      if (typeof data === "string") {
+        normalized = { type: "text", message: data };
+      } else if (!data?.type && typeof data?.message === "string") {
+        normalized = { type: "text", message: data.message };
       }
-      console.log("Received WebSocket message:", data);
+
+      setMessages((prev) => [...prev, normalized]);
+      console.log("Received WebSocket message:", normalized);
     };
     
     socket.onclose = () => {

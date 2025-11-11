@@ -8,8 +8,9 @@ class SuggestionEngine:
     Handles suggestion logic: move the suspect, find who can disprove, and report results.
     """
 
-    def __init__(self, players):
+    def __init__(self, players, room_name="default"):
         self.players = players  # list of dicts from GameManager
+        self.room_name = room_name
 
     # ======================================================================
     # Core logic
@@ -47,9 +48,14 @@ class SuggestionEngine:
             player_obj.current_hallway = None
             player_obj.current_room = new_room
             suspect_player["arrived_via_suggestion"] = True
-            Notifier.broadcast(f"  {suspect} was moved to {room_name} due to the suggestion.")
+            Notifier.broadcast(
+                f"  {suspect} was moved to {room_name} due to the suggestion.",
+                room=self.room_name,
+            )
         elif suspect_player:
-            Notifier.broadcast(f"  {suspect} is already in {room_name}.")
+            Notifier.broadcast(
+                f"  {suspect} is already in {room_name}.", room=self.room_name
+            )
 
         # Find players in order (excluding the suggester)
         player_order = self._rotate_players(suggesting_player)
@@ -64,11 +70,17 @@ class SuggestionEngine:
             ]
             if matching_cards:
                 chosen_card = random.choice(matching_cards)
-                Notifier.broadcast(f"🃏 {p['name']} disproved using {chosen_card}.")
+                Notifier.broadcast(
+                    f"🃏 {p['name']} disproved using {chosen_card}.",
+                    room=self.room_name,
+                )
                 return (f"{p['name']} disproved {suggester_name}'s suggestion.", chosen_card)
 
         # 4️⃣ No one can disprove
-        Notifier.broadcast(f"❌ No one could disprove {suggester_name}'s suggestion!")
+        Notifier.broadcast(
+            f"❌ No one could disprove {suggester_name}'s suggestion!",
+            room=self.room_name,
+        )
         return (f"No one could disprove {suggester_name}'s suggestion.", None)
 
     # ======================================================================

@@ -39,7 +39,7 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
             
             // Find my character if exists
             const playerId = localStorage.getItem('playerId');
-            const myPlayerData = data.players.find(p => p.id === playerId);
+            const myPlayerData = data.players.find(p => String(p.id) === String(playerId));
             const myCurrentCharacter = myPlayerData ? myPlayerData.character_name : null;
 
             // Only update state if there are changes
@@ -53,6 +53,9 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
                     if (selectedCharacter) {
                         setSelectedChar(selectedCharacter.id);
                     }
+                    localStorage.setItem('playerCharacter', myCurrentCharacter);
+                } else {
+                    localStorage.removeItem('playerCharacter');
                 }
             }
         } catch (error) {
@@ -110,6 +113,7 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
             const data = await response.json();
             setSelectedChar(character.id);
             onCharacterSelected({ character_name: character.name });
+            localStorage.setItem('playerCharacter', character.name);
         } catch (error) {
             console.error('Error selecting character:', error);
             setError(error.message || 'Failed to select character');
@@ -144,21 +148,6 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
                         </div>
                     );
                 })}
-            </div>
-            <div className="character-actions">
-                {myCharacter && (
-                    <button 
-                        className="change-character-btn"
-                        onClick={() => {
-                            setSelectedChar(null);
-                            setMyCharacter(null);
-                            setError(null);
-                        }}
-                    >
-                        Change Character
-                    </button>
-                )}
-
             </div>
         </div>
     );

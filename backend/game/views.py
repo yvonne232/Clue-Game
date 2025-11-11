@@ -13,6 +13,7 @@ from .models.lobby import Lobby
 from .models.lobby_player import LobbyPlayer
 from .serializers import GameSerializer, PlayerSerializer, LobbySerializer
 from game.game_engine.game_manager import GameManager
+from game.game_engine.session_registry import register_session, remove_session
 
 from rest_framework.decorators import api_view
 from django.http import JsonResponse
@@ -346,7 +347,7 @@ def select_character(request, lobby_id):
                     'error': 'Player is not in this lobby'
                 }, status=400)
             
-            from .class_draft.constants import SUSPECTS
+            from game.game_engine.constants import SUSPECTS
             if character_name not in SUSPECTS:
                 return JsonResponse({
                     'error': 'Invalid character name'
@@ -401,141 +402,56 @@ def get_lobby(request, lobby_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
-@api_view(['POST'])
+@api_view(["POST"])
 def start_game(request, lobby_id):
     try:
         with transaction.atomic():
-            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
+            lobby = Lobby.objects.prefetch_related("lobby_players").get(id=lobby_id)
             players = lobby.lobby_players.all()
-            
-            # Validate player count
+
             if players.count() < 2 or players.count() > 6:
-                return JsonResponse({
-                    'error': 'Game requires 2-6 players'
-                }, status=400)
-            
-            # Validate all players have selected characters
-            unready_players = players.filter(character_card__isnull=True)
-            if unready_players.exists():
-                return JsonResponse({
-                    'error': 'All players must select characters'
-                }, status=400)
-            
-            # Lock the lobby
-            lobby.status = 'in_game'
-            lobby.save()
-            
-            # Create the game and initialize the game state
+                return JsonResponse(
+                    {"error": "Game requires 2-6 players"}, status=400
+                )
+
+            if players.filter(character_card__isnull=True).exists():
+                return JsonResponse(
+                    {"error": "All players must select characters"}, status=400
+                )
+
             game_name = f"lobby_{lobby_id}"
+            remove_session(game_name)
+
             Game.objects.filter(name=game_name).delete()
             Player.objects.filter(game__name=game_name).delete()
             Solution.objects.all().delete()
-            
-            # Reset hallway occupancy
             Hallway.objects.all().update(is_occupied=False)
-            
-            # Initialize game with lobby players
+
             manager = GameManager(game_name=game_name, lobby_players=players)
-            
-            # Broadcast game start via websocket
+            register_session(game_name, manager)
+
+            lobby.status = "in_game"
+            lobby.save()
+
+            game_state = manager.serialize_state()
             channel_layer = get_channel_layer()
-            
-            # Get initial game state
-            game_state = {
-                "players": [
-                    {
-                        "id": player["player_obj"].id,  # Make sure to include player ID
-                        "name": player["name"],
-                        "location": player["location"].name if player["location"] else None,
-                        "hand": player["hand"],
-                        "eliminated": player["eliminated"]
-                    } for player in manager.players
-                ],
-                "current_player": manager.game.current_player.character_name if manager.game.current_player else None,
-                "is_completed": manager.game.is_completed,
-                "is_active": manager.game.is_active
-            }
-            
             async_to_sync(channel_layer.group_send)(
                 f"game_{lobby_id}",
+                {"type": "forward_game_state", "game_state": game_state},
+            )
+
+            return JsonResponse(
                 {
-                    "type": "game_message",
-                    "message": {
-                        "type": "game_state",  # Changed to directly send game_state type
-                        "game_state": game_state
-                    }
+                    "status": "success",
+                    "message": "Game started successfully",
+                    "game_id": manager.game.id,
+                    "game_state": game_state,
                 }
             )
-            
-            return JsonResponse({
-                "status": "success",
-                "message": "Game started successfully",
-                "game_id": manager.game.id
-            })
-    except Lobby.DoesNotExist:
-        return JsonResponse({'error': 'Lobby not found'}, status=404)
-    except Exception as e:
-        return JsonResponse({'error': str(e)}, status=400)
-
-@api_view(['POST'])
-def start_game(request, lobby_id):
-    try:
-        with transaction.atomic():
-            # Get the lobby and validate it has at least 2 players
-            lobby = Lobby.objects.prefetch_related('lobby_players').get(id=lobby_id)
-            players = lobby.lobby_players.all()
-            
-            if len(players) < 2:
-                return JsonResponse({"error": "At least 2 players required to start game"}, status=400)
-
-            # Validate all players have selected characters
-            for player in players:
-                if not player.character_card:
-                    return JsonResponse({"error": "All players must select a character before starting"}, status=400)
-            
-            # Initialize game manager with lobby players
-            manager = GameManager(game_name=f"lobby_{lobby_id}", lobby_players=players)
-            
-            # Mark lobby as in game
-            lobby.status = 'in_game'
-            lobby.save()
-            
-            # Broadcast game start via websocket
-            channel_layer = get_channel_layer()
-            async_to_sync(channel_layer.group_send)(
-                f"game_{lobby_id}",  # Changed to match the GameConsumer room name format
-                {
-                    "type": "game_message",  # Changed to match the GameConsumer handler method
-                    "message": {
-                        "type": "game.started",
-                        "gameStarted": True,
-                        "game_state": {
-                            "players": [
-                                {
-                                    "name": p["name"],
-                                    "location": p["location"].name if p["location"] else None,
-                                    "hand": p["hand"],
-                                    "eliminated": p["eliminated"]
-                                } for p in manager.players
-                            ],
-                            "current_player": manager.game.current_player.character_name if manager.game.current_player else None,
-                            "is_completed": manager.game.is_completed,
-                            "is_active": manager.game.is_active
-                        }
-                    }
-                }
-            )
-            
-            return JsonResponse({
-                "status": "success",
-                "message": "Game started successfully",
-                "game_id": manager.game.id
-            })
-            
     except Lobby.DoesNotExist:
         return JsonResponse({"error": "Lobby not found"}, status=404)
-    except Exception as e:
-        return JsonResponse({"error": str(e)}, status=500)
+    except Exception as exc:
+        return JsonResponse({"error": str(exc)}, status=400)
 
 # ---------------------------
 # GAME API VIEWS
