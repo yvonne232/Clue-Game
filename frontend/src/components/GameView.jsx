@@ -4,7 +4,7 @@ import React, {
   useMemo,
   useState,
 } from "react";
-import { useParams } from "react-router-dom";
+import { useNavigate, useParams } from "react-router-dom";
 
 import useWebSocket from "../hooks/useWebSocket";
 import "../styles/game.css";
@@ -92,7 +92,12 @@ function formatLocationLabel(playerEntry) {
   return `Location: ${namePart}`;
 }
 
-export default function GameView({ gameId: propGameId, initialGameState }) {
+export default function GameView({
+  gameId: propGameId,
+  initialGameState,
+  onReturnToLobby,
+  onRestartGame,
+}) {
   const { lobbyId } = useParams();
   const gameId = propGameId ?? lobbyId;
   const roomName = useMemo(() => {
@@ -102,18 +107,36 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
     return String(gameId);
   }, [gameId]);
 
+  const navigate = useNavigate();
+  const normalizedLobbyId = useMemo(() => {
+    if (!roomName) {
+      return null;
+    }
+    return roomName.startsWith("lobby_")
+      ? roomName.slice("lobby_".length)
+      : roomName;
+  }, [roomName]);
   const [gameState, setGameState] = useState(initialGameState ?? null);
   const [players, setPlayers] = useState(initialGameState?.players ?? []);
   const [currentPlayer, setCurrentPlayer] = useState(
     normalizeCurrentPlayer(initialGameState?.current_player),
   );
-  const [myPlayer, setMyPlayer] = useState(null);
+    const [myPlayer, setMyPlayer] = useState(null);
   const [moveOptions, setMoveOptions] = useState([]);
   const [isRequestingMoves, setIsRequestingMoves] = useState(false);
+  const [isRestarting, setIsRestarting] = useState(false);
+  const [suggestSuspect, setSuggestSuspect] = useState(SUSPECTS[0]);
+  const [suggestWeapon, setSuggestWeapon] = useState(WEAPONS[0]);
+  const [suggestRoom, setSuggestRoom] = useState(null);
+  const [accuseSuspect, setAccuseSuspect] = useState(SUSPECTS[0]);
+  const [accuseWeapon, setAccuseWeapon] = useState(WEAPONS[0]);
+  const [accuseRoom, setAccuseRoom] = useState(ROOMS[0]);
+  const [showSuggestionForm, setShowSuggestionForm] = useState(false);
+  const [showAccusationForm, setShowAccusationForm] = useState(false);
 
   const { messages, sendMessage } = useWebSocket(roomName);
 
-  useEffect(() => {
+    useEffect(() => {
     const storedGameId = localStorage.getItem("currentGamePlayerId");
     const storedLobbyId = localStorage.getItem("playerId");
     const storedCharacter = localStorage.getItem("playerCharacter");
@@ -140,10 +163,25 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
     } else {
       localStorage.removeItem("currentGamePlayerId");
     }
-  }, [players]);
+    }, [players]);
 
   const isGameActive = useMemo(
-    () => Boolean(gameState?.is_active && !gameState?.is_completed),
+    () =>
+      Boolean(
+        gameState?.is_active &&
+          !gameState?.is_completed &&
+          !gameState?.is_over &&
+          !gameState?.winner,
+      ),
+    [gameState],
+  );
+  const isGameOver = useMemo(
+    () =>
+      Boolean(
+        gameState?.winner ||
+          gameState?.is_over ||
+          (gameState?.is_completed && !gameState?.is_active),
+      ),
     [gameState],
   );
 
@@ -166,9 +204,38 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
   }, [currentPlayer, isGameActive, myPlayer]);
 
   const isInRoom = myPlayer?.location_type === "room";
-  const hasMovedThisTurn = Boolean(gameState?.turn_state?.has_moved);
 
   useEffect(() => {
+    if (isInRoom) {
+      const roomName =
+        myPlayer?.location_name ??
+        (typeof myPlayer?.location === "string"
+          ? myPlayer.location.split(" - ").pop()
+          : null);
+      setSuggestRoom(roomName ?? null);
+    } else {
+      setSuggestRoom(null);
+    }
+  }, [isInRoom, myPlayer]);
+
+  useEffect(() => {
+    if (isGameOver || !isMyTurn || !isInRoom || myPlayer?.eliminated) {
+      setShowSuggestionForm(false);
+    }
+  }, [isGameOver, isMyTurn, isInRoom, myPlayer]);
+
+  useEffect(() => {
+    if (isGameOver || !isMyTurn || myPlayer?.eliminated) {
+      setShowAccusationForm(false);
+    }
+  }, [isGameOver, isMyTurn, myPlayer]);
+
+  const hasMovedThisTurn = Boolean(gameState?.turn_state?.has_moved);
+  const lastSuggestion = gameState?.last_suggestion ?? null;
+  const lastSuggestionCard = lastSuggestion?.card ?? null;
+  const lastSuggestionResolved = lastSuggestion != null;
+
+    useEffect(() => {
     if (!messages.length) {
       return;
     }
@@ -204,6 +271,7 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
       }
       return;
     }
+
   }, [messages, myPlayer]);
 
   useEffect(() => {
@@ -214,49 +282,47 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
   }, [isMyTurn, hasMovedThisTurn, myPlayer]);
 
   const handleMakeMove = useCallback(() => {
-    if (!isMyTurn || myPlayer?.eliminated) {
+    if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
       return;
     }
     setIsRequestingMoves(true);
     setMoveOptions([]);
-    sendMessage({
+        sendMessage({
       type: "make_move",
-      player_id: myPlayer.id,
+            player_id: myPlayer.id,
     });
-  }, [isMyTurn, myPlayer, sendMessage]);
+  }, [isGameOver, isMyTurn, myPlayer, sendMessage]);
 
   const handleMoveOptionSelect = useCallback(
     (destination) => {
-      if (!isMyTurn || myPlayer?.eliminated || !destination) {
+      if (!isMyTurn || myPlayer?.eliminated || !destination || isGameOver) {
         return;
       }
       setIsRequestingMoves(true);
       setMoveOptions([]);
-      sendMessage({
+        sendMessage({
         type: "make_move",
-        player_id: myPlayer.id,
+            player_id: myPlayer.id,
         destination,
       });
     },
-    [isMyTurn, myPlayer, sendMessage],
+    [isGameOver, isMyTurn, myPlayer, sendMessage],
   );
 
   const handleSuggestion = useCallback(() => {
-    if (!isMyTurn || !isInRoom || myPlayer?.eliminated) {
+    if (isGameOver || !isMyTurn || !isInRoom || myPlayer?.eliminated) {
       return;
     }
-    const suspect = prompt(
-      `Choose a suspect to suggest:\n${SUSPECTS.join("\n")}`,
-      SUSPECTS[0],
-    );
-    if (!suspect || !SUSPECTS.includes(suspect)) {
+    setShowSuggestionForm(true);
+  }, [isGameOver, isInRoom, isMyTurn, myPlayer]);
+
+  const handleSuggestionSubmit = useCallback(() => {
+    if (isGameOver || !isMyTurn || !isInRoom || myPlayer?.eliminated) {
       return;
     }
-    const weapon = prompt(
-      `Choose a weapon to suggest:\n${WEAPONS.join("\n")}`,
-      WEAPONS[0],
-    );
-    if (!weapon || !WEAPONS.includes(weapon)) {
+    const suspect = suggestSuspect;
+    const weapon = suggestWeapon;
+    if (!suspect || !weapon || !suggestRoom) {
       return;
     }
     sendMessage({
@@ -264,55 +330,147 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
       player_id: myPlayer.id,
       suspect,
       weapon,
+      room: suggestRoom,
     });
-  }, [isMyTurn, isInRoom, myPlayer, sendMessage]);
+    setShowSuggestionForm(false);
+  }, [
+    isGameOver,
+    isMyTurn,
+    isInRoom,
+    myPlayer,
+    sendMessage,
+    suggestSuspect,
+    suggestWeapon,
+    suggestRoom,
+  ]);
+
+  const handleSuggestionCancel = useCallback(() => {
+    setShowSuggestionForm(false);
+  }, []);
 
   const handleAccusation = useCallback(() => {
-    if (!isMyTurn || myPlayer?.eliminated) {
+    if (isGameOver || !isMyTurn || myPlayer?.eliminated) {
       return;
     }
-    const suspect = prompt(
-      `Accuse a suspect:\n${SUSPECTS.join("\n")}`,
-      SUSPECTS[0],
-    );
-    if (!suspect || !SUSPECTS.includes(suspect)) {
+    setShowAccusationForm(true);
+  }, [isGameOver, isMyTurn, myPlayer]);
+
+  const handleAccusationSubmit = useCallback(() => {
+    if (isGameOver || !isMyTurn || myPlayer?.eliminated) {
       return;
     }
-    const weapon = prompt(
-      `Accuse a weapon:\n${WEAPONS.join("\n")}`,
-      WEAPONS[0],
-    );
-    if (!weapon || !WEAPONS.includes(weapon)) {
-      return;
-    }
-    const room = prompt(`Accuse a room:\n${ROOMS.join("\n")}`, ROOMS[0]);
-    if (!room || !ROOMS.includes(room)) {
-      return;
-    }
-    const confirmed = window.confirm(
-      `Accuse ${suspect} with the ${weapon} in the ${room}?`,
-    );
-    if (!confirmed) {
-      return;
-    }
+
     sendMessage({
       type: "make_accusation",
       player_id: myPlayer.id,
-      suspect,
-      weapon,
-      room,
+      suspect: accuseSuspect,
+      weapon: accuseWeapon,
+      room: accuseRoom,
     });
-  }, [isMyTurn, myPlayer, sendMessage]);
+    setShowAccusationForm(false);
+  }, [
+    isGameOver,
+    isMyTurn,
+    myPlayer,
+    sendMessage,
+    accuseSuspect,
+    accuseWeapon,
+    accuseRoom,
+  ]);
+
+  const handleAccusationCancel = useCallback(() => {
+    setShowAccusationForm(false);
+  }, []);
 
   const handleEndTurn = useCallback(() => {
-    if (!isMyTurn || myPlayer?.eliminated) {
+    if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
       return;
     }
-    sendMessage({
+            sendMessage({
       type: "end_turn",
-      player_id: myPlayer.id,
+                player_id: myPlayer.id,
     });
-  }, [isMyTurn, myPlayer, sendMessage]);
+  }, [isGameOver, isMyTurn, myPlayer, sendMessage]);
+
+  const handleReturnToLobby = useCallback(() => {
+    const playerId = localStorage.getItem("playerId");
+    if (normalizedLobbyId && playerId) {
+      if (typeof onReturnToLobby === "function") {
+        try {
+          onReturnToLobby({
+            lobbyId: normalizedLobbyId,
+            playerId,
+          });
+        } catch (error) {
+          console.error("Parent onReturnToLobby handler failed:", error);
+        }
+      } else {
+        (async () => {
+          try {
+            const apiBase =
+              import.meta.env.VITE_API_BASE_URL ||
+              `${window.location.protocol}//${window.location.hostname}:8000`;
+            const response = await fetch(`${apiBase}/api/lobbies/${normalizedLobbyId}/leave/`, {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ player_id: playerId }),
+            });
+            if (!response.ok) {
+              const payload = await response.json().catch(() => ({}));
+              const message =
+                payload?.error ||
+                payload?.detail ||
+                `Leave lobby failed (${response.status})`;
+              if (
+                response.status !== 400 ||
+                (message &&
+                  !/player is not in this lobby/i.test(message) &&
+                  !/already.*not.*lobby/i.test(message))
+              ) {
+                console.warn("Leave lobby request did not succeed:", message);
+              }
+            }
+          } catch (error) {
+            console.error("Failed to leave lobby:", error);
+          }
+        })();
+      }
+    }
+    localStorage.removeItem("currentGamePlayerId");
+    localStorage.removeItem("playerCharacter");
+    navigate("/", { replace: true });
+  }, [navigate, normalizedLobbyId, onReturnToLobby]);
+
+  const handleRestartGame = useCallback(async () => {
+    if (!normalizedLobbyId) {
+      return;
+    }
+    setIsRestarting(true);
+    try {
+      if (typeof onRestartGame === "function") {
+        await onRestartGame({ lobbyId: normalizedLobbyId });
+      } else {
+        const apiBase =
+          import.meta.env.VITE_API_BASE_URL ||
+          `${window.location.protocol}//${window.location.hostname}:8000`;
+        const response = await fetch(`${apiBase}/api/lobbies/${normalizedLobbyId}/start/`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        });
+        if (!response.ok) {
+          const payload = await response.json().catch(() => ({}));
+          const message =
+            payload?.detail || payload?.error || `Restart failed (${response.status})`;
+          throw new Error(message);
+        }
+      }
+    } catch (error) {
+      console.error("Failed to restart game:", error);
+      window.alert(error.message || "Unable to restart the game.");
+    } finally {
+      setIsRestarting(false);
+    }
+  }, [normalizedLobbyId, onRestartGame]);
 
   const renderedMessages = useMemo(() => {
     return messages
@@ -351,12 +509,21 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
     );
   }
 
-  return (
-    <div className="game-view">
-      <div className="game-header">
-        <h2>Clue-Less Game</h2>
-        <div className="turn-indicator">
-          {currentPlayer ? (
+    return (
+        <div className="game-view">
+            <div className="game-header">
+                <h2>Clue-Less Game</h2>
+                <div className="turn-indicator">
+          {isGameOver ? (
+                        <div>
+              <div className="turn-indicator-title">Game Over</div>
+              <div className="turn-indicator-subtitle">
+                {gameState?.winner
+                  ? `${gameState.winner} solved the mystery!`
+                  : "No winner this time."}
+                </div>
+            </div>
+          ) : currentPlayer ? (
             <div>
               Current Turn: <strong>{currentPlayer.name}</strong>
               {isMyTurn && <span className="your-turn"> — Your Turn!</span>}
@@ -365,16 +532,16 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
             "Waiting for game start..."
           )}
         </div>
-        {gameState?.winner && (
+        {isGameOver && gameState?.winner && (
           <div className="winner-banner">
             Winner: <strong>{gameState.winner}</strong>
           </div>
         )}
-      </div>
+            </div>
 
-      <div className="player-list">
-        <h3>Players</h3>
-        <div className="players">
+            <div className="player-list">
+                <h3>Players</h3>
+                <div className="players">
           {players.map((player) => {
             const isCurrent =
               (currentPlayer?.id != null &&
@@ -391,55 +558,45 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
 
             return (
               <div key={player.id} className={cardClass}>
-                <div className="player-name">
+                            <div className="player-name">
                   {player.name} {player.id === myPlayer?.id ? "(You)" : ""}
                   {isCurrent && <span className="current-turn-marker">🎯</span>}
-                </div>
-                <div className="player-location">
+                            </div>
+                            <div className="player-location">
                   {formatLocationLabel(player)}
-                </div>
-                {player.eliminated && (
+                            </div>
+                {player.id === myPlayer?.id &&
+                  Array.isArray(player.known_cards) &&
+                  player.known_cards.length > 0 && (
+                    <div className="player-known-cards">
+                      Known Cards: {player.known_cards.join(", ")}
+                    </div>
+                  )}
+                            {player.eliminated && (
                   <div className="player-eliminated">Eliminated</div>
-                )}
-              </div>
+                            )}
+                        </div>
             );
           })}
-        </div>
-      </div>
+                </div>
+            </div>
 
-      <div className="game-controls">
+            <div className="game-controls">
         <div className="button-row">
-          {isMyTurn &&
-            !myPlayer?.eliminated &&
-            !hasMovedThisTurn &&
-            moveOptions.map((option) => (
-              <button
-                key={option}
-                className="game-button movement"
-                onClick={() => handleMoveOptionSelect(option)}
-              >
-                {formatMoveOptionLabel(option) || option}
-              </button>
-            ))}
-          {isMyTurn &&
-            !myPlayer?.eliminated &&
-            !hasMovedThisTurn &&
-            isRequestingMoves &&
-            moveOptions.length === 0 && (
-              <button className="game-button movement" disabled>
-                Getting movement options…
-              </button>
-            )}
           {isMyTurn && !myPlayer?.eliminated && hasMovedThisTurn && (
             <button className="game-button movement" disabled>
               Movement complete
             </button>
           )}
-          <button
-            onClick={handleMakeMove}
-            className="game-button"
+                <button 
+                    onClick={handleMakeMove} 
+                    className="game-button"
             disabled={
-              !isMyTurn || myPlayer?.eliminated || hasMovedThisTurn || isRequestingMoves
+              !isMyTurn ||
+              myPlayer?.eliminated ||
+              hasMovedThisTurn ||
+              isRequestingMoves ||
+              isGameOver
             }
             title={
               !isMyTurn
@@ -448,15 +605,17 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
                   ? "You have been eliminated"
                   : hasMovedThisTurn
                     ? "You have already moved this turn"
+                  : isGameOver
+                    ? "The game has ended"
                     : "Request available destinations"
             }
           >
             Request Movement
-          </button>
-          <button
-            onClick={handleSuggestion}
-            className="game-button"
-            disabled={!isMyTurn || !isInRoom || myPlayer?.eliminated}
+                </button>
+                <button 
+                    onClick={handleSuggestion} 
+                    className="game-button"
+            disabled={!isMyTurn || !isInRoom || myPlayer?.eliminated || isGameOver}
             title={
               !isMyTurn
                 ? "Wait for your turn"
@@ -464,20 +623,24 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
                   ? "You must be in a room to make a suggestion"
                   : myPlayer?.eliminated
                     ? "You have been eliminated"
+                  : isGameOver
+                    ? "The game has ended"
                     : "Suggest a suspect and weapon"
             }
-          >
-            Make Suggestion
-          </button>
-          <button
-            onClick={handleAccusation}
-            className="game-button warning"
-            disabled={!isMyTurn || myPlayer?.eliminated}
+                >
+                    Make Suggestion
+                </button>
+                <button 
+                    onClick={handleAccusation} 
+                    className="game-button warning"
+            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver}
             title={
               !isMyTurn
                 ? "Wait for your turn"
                 : myPlayer?.eliminated
                   ? "You have been eliminated"
+                  : isGameOver
+                    ? "The game has ended"
                   : "Accuse the culprit (wrong guess eliminates you)"
             }
           >
@@ -486,29 +649,192 @@ export default function GameView({ gameId: propGameId, initialGameState }) {
           <button
             onClick={handleEndTurn}
             className="game-button secondary"
-            disabled={!isMyTurn || myPlayer?.eliminated}
+            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver}
             title={
               !isMyTurn
                 ? "Wait for your turn"
                 : myPlayer?.eliminated
                   ? "You have been eliminated"
+                  : isGameOver
+                    ? "The game has ended"
                   : "Finish your turn"
             }
           >
             End Turn
           </button>
         </div>
-      </div>
 
-      <div className="game-messages">
+        {isMyTurn && !myPlayer?.eliminated && !hasMovedThisTurn && !isGameOver && (
+          <div className="move-options">
+            {isRequestingMoves && moveOptions.length === 0 ? (
+              <button className="game-button movement" disabled>
+                Getting movement options…
+              </button>
+            ) : (
+              moveOptions.map((option) => (
+                <button
+                  key={option}
+                  className="game-button movement"
+                  onClick={() => handleMoveOptionSelect(option)}
+                >
+                  {formatMoveOptionLabel(option) || option}
+                </button>
+              ))
+            )}
+          </div>
+        )}
+
+        {showSuggestionForm && (
+          <div className="suggestion-form">
+            <div className="suggestion-row">
+              <label>
+                Suspect
+                <select
+                  value={suggestSuspect}
+                  onChange={(event) => setSuggestSuspect(event.target.value)}
+                >
+                  {SUSPECTS.map((suspect) => (
+                    <option key={suspect} value={suspect}>
+                      {suspect}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Weapon
+                <select
+                  value={suggestWeapon}
+                  onChange={(event) => setSuggestWeapon(event.target.value)}
+                >
+                  {WEAPONS.map((weapon) => (
+                    <option key={weapon} value={weapon}>
+                      {weapon}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Room
+                <input type="text" value={suggestRoom ?? ""} readOnly />
+              </label>
+            </div>
+            <div className="suggestion-actions">
+              <button className="game-button" onClick={handleSuggestionSubmit}>
+                Submit Suggestion
+              </button>
+              <button
+                className="game-button secondary"
+                onClick={handleSuggestionCancel}
+              >
+                Cancel
+                </button>
+            </div>
+          </div>
+        )}
+
+        {showAccusationForm && (
+          <div className="suggestion-form accusation-form">
+            <div className="suggestion-row">
+              <label>
+                Suspect
+                <select
+                  value={accuseSuspect}
+                  onChange={(event) => setAccuseSuspect(event.target.value)}
+                >
+                  {SUSPECTS.map((suspect) => (
+                    <option key={suspect} value={suspect}>
+                      {suspect}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Weapon
+                <select
+                  value={accuseWeapon}
+                  onChange={(event) => setAccuseWeapon(event.target.value)}
+                >
+                  {WEAPONS.map((weapon) => (
+                    <option key={weapon} value={weapon}>
+                      {weapon}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                Room
+                <select
+                  value={accuseRoom}
+                  onChange={(event) => setAccuseRoom(event.target.value)}
+                >
+                  {ROOMS.map((room) => (
+                    <option key={room} value={room}>
+                      {room}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            </div>
+            <div className="suggestion-actions">
+              <button className="game-button warning" onClick={handleAccusationSubmit}>
+                Submit Accusation
+              </button>
+              <button
+                className="game-button secondary"
+                onClick={handleAccusationCancel}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        )}
+
+        {isGameOver && (
+          <div className="game-over-panel">
+            <div className="game-over-text">
+              {gameState?.winner
+                ? `${gameState.winner} has won the game!`
+                : "The game has ended."}
+            </div>
+            <button
+              className="game-button"
+              onClick={handleRestartGame}
+              disabled={isRestarting}
+            >
+              {isRestarting ? "Restarting…" : "Restart Game"}
+            </button>
+            <button className="game-button secondary" onClick={handleReturnToLobby}>
+              Return to Lobby
+            </button>
+          </div>
+        )}
+
+        {lastSuggestionResolved && (
+          <div className="suggestion-result-banner">
+            {lastSuggestionCard ? (
+              <>
+                <strong>{lastSuggestion?.suggester}</strong>'s suggestion was disproved
+                with <strong>{lastSuggestionCard}</strong>.
+              </>
+            ) : (
+              <>
+                No one could disprove <strong>{lastSuggestion?.suggester}</strong>'s
+                suggestion.
+              </>
+            )}
+          </div>
+        )}
+            </div>
+
+            <div className="game-messages">
         {renderedMessages.length > 0 ? (
           renderedMessages
         ) : (
           <div className="game-message placeholder">
             Game updates will appear here.
-          </div>
+                    </div>
         )}
-      </div>
-    </div>
-  );
+            </div>
+        </div>
+    );
 }

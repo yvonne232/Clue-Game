@@ -161,7 +161,7 @@ export default function LobbyView() {
     };
   }, [pollLobbies, pollCurrentLobby, currentLobby, isGameStarted]);
 
-  const fetchLobbies = async () => {
+  const fetchLobbies = useCallback(async () => {
     try {
       console.log('Fetching lobbies...');
       const response = await fetch('http://127.0.0.1:8000/api/lobbies/');
@@ -171,7 +171,7 @@ export default function LobbyView() {
     } catch (error) {
       console.error('Error fetching lobbies:', error);
     }
-  };
+  }, []);
 
   const createLobby = async () => {
     try {
@@ -275,8 +275,8 @@ export default function LobbyView() {
     }
   };
 
-  const leaveLobby = async () => {
-    if (!currentLobby) return;
+  const leaveLobby = useCallback(async () => {
+    if (!currentLobby) return false;
     
     try {
       const playerId = localStorage.getItem('playerId');
@@ -300,13 +300,15 @@ export default function LobbyView() {
         }
         setCurrentLobby(null);
         fetchLobbies();
-      } else {
-        console.error('Error leaving lobby:', data.error);
+        return true;
       }
+      console.error('Error leaving lobby:', data.error);
+      return false;
     } catch (error) {
       console.error('Error leaving lobby:', error);
+      return false;
     }
-  };
+  }, [currentLobby, fetchLobbies, socket]);
 
   const createPlayer = async () => {
     try {
@@ -331,10 +333,9 @@ export default function LobbyView() {
     }
   };
 
-  const startGame = async () => {
+  const startGame = useCallback(async () => {
+    if (!currentLobby) return false;
     try {
-      if (!currentLobby) return;
-
       console.log('Starting game for lobby:', currentLobby.id);
       
       const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/start/`, {
@@ -347,19 +348,17 @@ export default function LobbyView() {
       const data = await response.json();
       if (data.error) {
         setError(data.error);
-        return;
+        return false;
       }
 
       console.log('Game start response:', data);
-      
-      // We'll wait for the WebSocket to confirm game start and update state
-      // The game state will be sent through the WebSocket connection
-
+      return true;
     } catch (error) {
       console.error('Error starting game:', error);
       setError('Failed to start game');
+      return false;
     }
-  };
+  }, [currentLobby]);
 
   return (
     <div className="lobby-container">
@@ -375,6 +374,11 @@ export default function LobbyView() {
           gameId={currentLobby.id} 
           messages={messages}
           initialGameState={messages.find(m => m.type === 'game_state')?.game_state}
+          onReturnToLobby={async () => {
+            await leaveLobby();
+            setIsGameStarted(false);
+          }}
+          onRestartGame={startGame}
         />
       ) : !currentLobby ? (
         <>

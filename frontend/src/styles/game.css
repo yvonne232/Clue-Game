@@ -66,6 +66,15 @@
   font-weight: bold;
 }
 
+.turn-indicator-title {
+  font-size: 1.2rem;
+}
+
+.turn-indicator-subtitle {
+  font-weight: normal;
+  font-size: 0.95rem;
+}
+
 .player-list {
   margin-bottom: 30px;
 }
@@ -103,6 +112,13 @@
 .player-location {
   color: #666;
   font-size: 0.9em;
+}
+
+.player-known-cards {
+  margin-top: 8px;
+  font-size: 0.9em;
+  color: #2e7d32;
+  font-weight: 600;
 }
 
 .player-eliminated {
@@ -206,6 +222,70 @@
   cursor: default;
 }
 
+.game-over-panel {
+  margin-top: 16px;
+  padding: 18px;
+  border-radius: 8px;
+  background: #ffe082;
+  color: #4e342e;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.1);
+}
+
+.game-over-text {
+  font-weight: 600;
+  font-size: 1.05rem;
+  flex: 1 1 auto;
+}
+
+.suggestion-form {
+  background: #ffffff;
+  border-radius: 8px;
+  padding: 16px;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.suggestion-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.suggestion-row label {
+  display: flex;
+  flex-direction: column;
+  font-weight: 600;
+  gap: 6px;
+  min-width: 160px;
+  flex: 1 1 160px;
+}
+
+.suggestion-row select,
+.suggestion-row input {
+  padding: 8px;
+  border-radius: 4px;
+  border: 1px solid #ccc;
+  font-size: 0.95rem;
+  background: #fafafa;
+}
+
+.suggestion-row input[readonly] {
+  background: #eceff1;
+  color: #455a64;
+}
+
+.suggestion-actions {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .action-form {
   background: #fff;
   border-radius: 6px;
@@ -273,6 +353,16 @@
 .game-message.placeholder {
   color: #999;
   font-style: italic;
+}
+
+.suggestion-result-banner {
+  margin-top: 12px;
+  padding: 10px 14px;
+  background: #fff3cd;
+  border: 1px solid #ffeeba;
+  border-radius: 6px;
+  color: #856404;
+  font-size: 0.95rem;
 }
 
 .game-message:last-child {

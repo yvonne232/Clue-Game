@@ -29,14 +29,15 @@ class GameManager:
         }
         self.is_over = False
         self.winner: Optional[str] = None
+        self.last_suggestion_result: Optional[Dict] = None
 
         # Ensure we have a database record for the game
         self.game, _ = Game.objects.get_or_create(name=game_name)
         Game.objects.filter(pk=self.game.pk).update(
-                is_completed=False,
-                is_active=True,
-                current_player=None,
-            )
+            is_completed=False,
+            is_active=True,
+            current_player=None,
+        )
         self.game.refresh_from_db()
 
         # Clear any lingering players from a previous run of the same game
@@ -56,7 +57,6 @@ class GameManager:
         }
         Game.objects.filter(pk=self.game.pk).update(solution=solution_obj)
         self.game.solution = solution_obj
-        
         # Create database-backed players for this session
         self._create_players(lobby_players)
 
@@ -80,7 +80,11 @@ class GameManager:
     # Public API used by websocket consumer
     # ------------------------------------------------------------------
     def serialize_state(self) -> Dict:
-        current_entry = self.players[self.current_index] if self.players else None
+        current_entry = (
+            self.players[self.current_index]
+            if self.players and not self.is_over
+            else None
+        )
         current_payload = (
             {
                 "id": current_entry["player_obj"].id,
@@ -99,6 +103,7 @@ class GameManager:
                     "location_type": self._location_type(entry["location"]),
                     "eliminated": entry["eliminated"],
                     "arrived_via_suggestion": entry.get("arrived_via_suggestion", False),
+                    "known_cards": sorted(entry.get("known_cards", [])),
                 }
                 for entry in self.players
             ],
@@ -106,7 +111,9 @@ class GameManager:
             "turn_state": dict(self.turn_state),
             "is_active": self.game.is_active,
             "is_completed": self.game.is_completed,
+            "is_over": self.is_over,
             "winner": self.winner,
+            "last_suggestion": self.last_suggestion_result,
         }
 
     def get_player_entry(self, player_id: int) -> Optional[Dict]:
@@ -163,6 +170,9 @@ class GameManager:
         return options
 
     def move_player(self, player_id: int, destination_name: Optional[str] = None):
+        if self.is_over:
+            return {"success": False, "error": "The game has already ended."}
+
         entry = self.get_player_entry(player_id)
         if not entry:
             return {"success": False, "error": "Player not found."}
@@ -216,6 +226,9 @@ class GameManager:
         return {"success": True, "messages": [message]}
 
     def make_suggestion_action(self, player_id: int, suspect: str, weapon: str):
+        if self.is_over:
+            return {"success": False, "error": "The game has already ended."}
+
         entry = self.get_player_entry(player_id)
         if not entry:
             return {"success": False, "error": "Player not found."}
@@ -235,12 +248,34 @@ class GameManager:
         )
         if disproving_card:
             entry["known_cards"].add(disproving_card)
+            self.last_suggestion_result = {
+                "suspect": suspect,
+                "weapon": weapon,
+                "room": location.name,
+                "suggester": entry["name"],
+                "card": disproving_card,
+            }
+        else:
+            self.last_suggestion_result = {
+                "suspect": suspect,
+                "weapon": weapon,
+                "room": location.name,
+                "suggester": entry["name"],
+                "card": None,
+            }
 
         entry["arrived_via_suggestion"] = True
         self.turn_state["made_suggestion"] = True
-        return {"success": True, "messages": [intro, result_message]}
+        return {
+            "success": True,
+            "messages": [intro, result_message],
+            "payload": dict(self.last_suggestion_result),
+        }
 
     def make_accusation_action(self, player_id: int, suspect: str, weapon: str, room: str):
+        if self.is_over:
+            return {"success": False, "error": "The game has already ended."}
+
         entry = self.get_player_entry(player_id)
         if not entry:
             return {"success": False, "error": "Player not found."}
@@ -290,6 +325,9 @@ class GameManager:
         }
 
     def end_turn(self, player_id: int):
+        if self.is_over:
+            return {"success": False, "error": "The game has already ended."}
+
         entry = self.get_player_entry(player_id)
         if not entry:
             return {"success": False, "error": "Player not found."}

@@ -224,6 +224,7 @@ class GameConsumer(AsyncWebsocketConsumer):
             },
             "is_completed": game.is_completed,
             "is_active": game.is_active,
+            "is_over": game.is_completed and not game.is_active,
             "winner": None,
         }
 
