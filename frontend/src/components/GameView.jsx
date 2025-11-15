@@ -136,6 +136,8 @@ export default function GameView({
   const [showDisproveModal, setShowDisproveModal] = useState(false);
   const [disproofInfo, setDisproofInfo] = useState(null);
   const [selectedDisproofCard, setSelectedDisproofCard] = useState(null);
+  const [showSuggestionBanner, setShowSuggestionBanner] = useState(true);
+  const [previousPlayerId, setPreviousPlayerId] = useState(null);
 
   const { messages, sendMessage } = useWebSocket(roomName);
 
@@ -316,6 +318,24 @@ export default function GameView({
       setMoveOptions([]);
     }
   }, [isMyTurn, hasMovedThisTurn, myPlayer]);
+
+  // Hide suggestion banner when turn changes
+  useEffect(() => {
+    const currentPlayerId = gameState?.current_player?.id;
+    if (currentPlayerId !== undefined && previousPlayerId !== null && currentPlayerId !== previousPlayerId) {
+      setShowSuggestionBanner(false);
+    }
+    if (currentPlayerId !== undefined) {
+      setPreviousPlayerId(currentPlayerId);
+    }
+  }, [gameState?.current_player?.id, previousPlayerId]);
+
+  // Show banner when new suggestion is resolved
+  useEffect(() => {
+    if (lastSuggestionResolved && lastSuggestionCard) {
+      setShowSuggestionBanner(true);
+    }
+  }, [lastSuggestionResolved, lastSuggestionCard]);
 
   const handleMakeMove = useCallback(() => {
     if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
@@ -526,7 +546,8 @@ export default function GameView({
   const renderedMessages = useMemo(() => {
     return messages
       .map((msg, index) => {
-        if (!msg || msg.type === "game_state" || msg.type === "move_options") {
+        if (!msg || msg.type === "game_state" || msg.type === "move_options" || 
+            msg.type === "disprove_prompt" || msg.type === "disproof_result") {
           return null;
         }
         const text =
@@ -548,7 +569,8 @@ export default function GameView({
           </div>
         );
       })
-      .filter(Boolean);
+      .filter(Boolean)
+      .reverse(); // Newest messages first
   }, [messages]);
 
   if (!gameId) {
@@ -884,31 +906,21 @@ export default function GameView({
           </div>
         )}
 
-        {lastSuggestionResolved && (
+        {showSuggestionBanner && lastSuggestionResolved && lastSuggestionCard && myPlayer && (
           <div className="suggestion-result-banner">
-            {lastSuggestionCard && myPlayer && lastSuggestion?.suggester === myPlayer.name ? (
-              // Suggester sees their own card and who disproved it
+            {lastSuggestion?.suggester === myPlayer.name ? (
+              // Suggester sees the card privately
               <>
                 Your suggestion was disproved by <strong>{lastSuggestion?.disprover}</strong>{' '}
                 with <strong>{lastSuggestionCard}</strong>.
               </>
-            ) : lastSuggestionCard && myPlayer && lastSuggestion?.disprover === myPlayer.name ? (
-              // Disprover sees confirmation with card name
+            ) : lastSuggestion?.disprover === myPlayer.name ? (
+              // Disprover sees confirmation
               <>
                 You disproved <strong>{lastSuggestion?.suggester}</strong>'s suggestion
                 with <strong>{lastSuggestionCard}</strong>.
               </>
-            ) : lastSuggestionCard ? (
-              // Other players see generic message
-              <>
-                <strong>{lastSuggestion?.suggester}</strong>'s suggestion was disproved.
-              </>
-            ) : (
-              <>
-                No one could disprove <strong>{lastSuggestion?.suggester}</strong>'s
-                suggestion.
-              </>
-            )}
+            ) : null}
           </div>
         )}
             </div>
