@@ -138,6 +138,7 @@ export default function GameView({
   const [selectedDisproofCard, setSelectedDisproofCard] = useState(null);
   const [showSuggestionBanner, setShowSuggestionBanner] = useState(true);
   const [previousPlayerId, setPreviousPlayerId] = useState(null);
+  const [pendingStatusMessage, setPendingStatusMessage] = useState(null);
 
   const { messages, sendMessage } = useWebSocket(roomName);
 
@@ -292,6 +293,9 @@ export default function GameView({
         matching_cards: latest.matching_cards,
       });
       
+      // Show pending status for all players
+      setPendingStatusMessage(`Waiting for ${latest.disprover_name} to choose a card to disprove...`);
+      
       // Show modal only if this client is the disprover
       if (myPlayer && String(myPlayer.id) === String(latest.disprover_id)) {
         setShowDisproveModal(true);
@@ -301,6 +305,9 @@ export default function GameView({
     }
 
     if (latest?.type === "disproof_result") {
+      // Clear pending status when disproof is complete
+      setPendingStatusMessage(null);
+      
       // Only show to the suggester
       if (myPlayer && String(myPlayer.id) === String(latest.suggester_id)) {
         // Suggester sees the card privately
@@ -324,6 +331,7 @@ export default function GameView({
     const currentPlayerId = gameState?.current_player?.id;
     if (currentPlayerId !== undefined && previousPlayerId !== null && currentPlayerId !== previousPlayerId) {
       setShowSuggestionBanner(false);
+      setPendingStatusMessage(null); // Clear pending status on turn change
     }
     if (currentPlayerId !== undefined) {
       setPreviousPlayerId(currentPlayerId);
@@ -903,6 +911,12 @@ export default function GameView({
             <button className="game-button secondary" onClick={handleReturnToLobby}>
               Return to Lobby
             </button>
+          </div>
+        )}
+
+        {pendingStatusMessage && (
+          <div className="suggestion-result-banner pending-status">
+            {pendingStatusMessage}
           </div>
         )}
 
