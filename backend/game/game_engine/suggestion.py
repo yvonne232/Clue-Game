@@ -66,8 +66,6 @@ class SuggestionEngine:
 
         # Find the first player who can disprove
         for p in player_order:
-            if p["eliminated"]:
-                continue
             matching_cards = [
                 card for card in p["hand"]
                 if card in {suspect, weapon, room_name}
