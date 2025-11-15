@@ -30,6 +30,8 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self._handle_make_move(data)
         elif msg_type == "make_suggestion":
             await self._handle_make_suggestion(data)
+        elif msg_type == "choose_disproving_card":
+            await self._handle_choose_disproving_card(data)
         elif msg_type == "make_accusation":
             await self._handle_make_accusation(data)
         elif msg_type == "end_turn":
@@ -84,6 +86,56 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self._send_error(result.get("error", "Suggestion failed."))
             return
 
+        # If awaiting_disproof, send disprove_prompt to the disprover
+        if result.get("awaiting_disproof"):
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "disprove_prompt",
+                    "disprover_id": result.get("disprover_id"),
+                    "disprover_name": result.get("disprover_name"),
+                    "suggester_name": result.get("suggester_name"),
+                    "matching_cards": result.get("matching_cards", []),
+                },
+            )
+
+        await self._broadcast_game_state()
+
+    async def _handle_choose_disproving_card(self, data):
+        player_id = data.get("player_id")
+        card_name = data.get("card_name")
+        
+        if player_id is None:
+            await self._send_error("Player ID is required to choose a card.")
+            return
+        if card_name is None:
+            await self._send_error("Card name is required.")
+            return
+
+        result = await self._manager_call(
+            "choose_disproving_card",
+            player_id=int(player_id),
+            card_name=card_name,
+        )
+        if not result.get("success"):
+            await self._send_error(result.get("error", "Unable to choose card."))
+            return
+
+        # Send private card reveal to the suggester
+        suggester_id = result.get("suggester_id")
+        if suggester_id:
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "disproof_result",
+                    "suggester_id": suggester_id,
+                    "card": result.get("card"),
+                    "disprover_name": result.get("disprover_name"),
+                    "suggester_name": result.get("suggester_name"),
+                },
+            )
+
+        # Broadcast the result to all players
         await self._broadcast_game_state()
 
     async def _handle_make_accusation(self, data):
@@ -147,6 +199,37 @@ class GameConsumer(AsyncWebsocketConsumer):
                 "message": message,
             }
         )
+
+    async def disprove_prompt(self, event):
+        """Send disprove prompt to the disprover."""
+        disprover_id = event.get("disprover_id")
+        disprover_name = event.get("disprover_name")
+        suggester_name = event.get("suggester_name")
+        matching_cards = event.get("matching_cards", [])
+        
+        await self.send_json({
+            "type": "disprove_prompt",
+            "disprover_id": disprover_id,
+            "disprover_name": disprover_name,
+            "suggester_name": suggester_name,
+            "matching_cards": matching_cards,
+        })
+
+    async def disproof_result(self, event):
+        """Send private card reveal to the suggester."""
+        suggester_id = event.get("suggester_id")
+        card = event.get("card")
+        disprover_name = event.get("disprover_name")
+        suggester_name = event.get("suggester_name")
+        
+        # Only send to suggester (client checks if this is their ID)
+        await self.send_json({
+            "type": "disproof_result",
+            "suggester_id": suggester_id,
+            "card": card,
+            "disprover_name": disprover_name,
+            "suggester_name": suggester_name,
+        })
 
     async def _send_error(self, message: str):
         await self.send_json({"type": "error", "message": message})

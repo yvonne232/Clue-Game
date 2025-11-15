@@ -30,6 +30,7 @@ class GameManager:
         self.is_over = False
         self.winner: Optional[str] = None
         self.last_suggestion_result: Optional[Dict] = None
+        self.pending_disproof: Dict = {}
 
         # Ensure we have a database record for the game
         self.game, _ = Game.objects.get_or_create(name=game_name)
@@ -243,19 +244,50 @@ class GameManager:
 
         intro = f"{entry['name']} suggests {suspect} with {weapon} in {location.name}."
         Notifier.broadcast(intro, room=self.room_name)
-        result_message, disproving_card = self.suggestion_engine.handle_suggestion(
+        
+        # Call handle_suggestion with new return format (dict) of pending disproof state
+        disproof_result = self.suggestion_engine.handle_suggestion(
             entry, suspect, weapon, location.name
         )
-        if disproving_card:
-            entry["known_cards"].add(disproving_card)
-            self.last_suggestion_result = {
-                "suspect": suspect,
-                "weapon": weapon,
-                "room": location.name,
-                "suggester": entry["name"],
-                "card": disproving_card,
+        
+        # Store the pending disproof state for later use
+        # include the suggester's database id so we can privately message them
+        self.pending_disproof = {
+            "suggester_id": entry["player_obj"].id,
+            "suggester_name": entry["name"],
+            "suspect": suspect,
+            "weapon": weapon,
+            "room": location.name,
+        }
+        
+        if disproof_result["pending_disproof"]:
+            # Disproof pending: disprover must choose a card
+            disprover = disproof_result["first_disprover"]
+            matching_cards = disproof_result["matching_cards"]
+            
+            self.pending_disproof["disprover_id"] = disprover["player_obj"].id
+            self.pending_disproof["disprover_name"] = disprover["name"]
+            self.pending_disproof["matching_cards"] = matching_cards
+            
+            entry["arrived_via_suggestion"] = True
+            self.turn_state["made_suggestion"] = True
+            
+            return {
+                "success": True,
+                "awaiting_disproof": True,
+                "disprover_id": disprover["player_obj"].id,
+                "disprover_name": disprover["name"],
+                "suggester_name": entry["name"],
+                "matching_cards": matching_cards,
+                "messages": [intro, disproof_result["message"]],
             }
         else:
+            # No one could disprove
+            Notifier.broadcast(
+                f"❌ No one could disprove {entry['name']}'s suggestion!",
+                room=self.room_name,
+            )
+            
             self.last_suggestion_result = {
                 "suspect": suspect,
                 "weapon": weapon,
@@ -263,13 +295,82 @@ class GameManager:
                 "suggester": entry["name"],
                 "card": None,
             }
+            
+            entry["arrived_via_suggestion"] = True
+            self.turn_state["made_suggestion"] = True
+            
+            return {
+                "success": True,
+                "awaiting_disproof": False,
+                "messages": [intro, disproof_result["message"]],
+                "payload": dict(self.last_suggestion_result),
+            }
 
-        entry["arrived_via_suggestion"] = True
-        self.turn_state["made_suggestion"] = True
+    def choose_disproving_card(self, player_id: int, card_name: str):
+        """
+        Disprover chooses which card to reveal.
+        - Validate the card is in their hand and matches the suggestion.
+        - Store the revealed card.
+        - Return success payload with card name.
+        """
+        if self.is_over:
+            return {"success": False, "error": "The game has already ended."}
+
+        # Check if there's a pending disproof
+        if not self.pending_disproof:
+            return {"success": False, "error": "No pending disproof."}
+
+        # Verify the player is the disprover
+        disprover_id = self.pending_disproof.get("disprover_id")
+        if disprover_id != player_id:
+            return {"success": False, "error": "You are not the current disprover."}
+
+        # Get the disprover entry
+        disprover = self.get_player_entry(player_id)
+        if not disprover:
+            return {"success": False, "error": "Disprover not found."}
+
+        # Verify the card is in matching cards
+        matching_cards = self.pending_disproof.get("matching_cards", [])
+        if card_name not in matching_cards:
+            return {"success": False, "error": f"Card '{card_name}' is not a valid choice."}
+
+        # Verify the card is in the disprover's hand
+        if card_name not in disprover["hand"]:
+            return {"success": False, "error": f"Card '{card_name}' is not in your hand."}
+
+        # Store the revealed card in suggestion result
+        suggester_id = self.pending_disproof.get("suggester_id")
+        self.last_suggestion_result = {
+            "suspect": self.pending_disproof.get("suspect"),
+            "weapon": self.pending_disproof.get("weapon"),
+            "room": self.pending_disproof.get("room"),
+            "suggester": self.pending_disproof.get("suggester_name"),
+            "card": card_name,
+            "disprover": disprover["name"],
+        }
+
+        # Add the revealed card to suggester's known cards
+        suggester = self.get_player_entry(suggester_id)
+        if suggester:
+            suggester["known_cards"].add(card_name)
+
+        # Broadcast to all players that suggestion was disproved
+        Notifier.broadcast(
+            f"🃏 {disprover['name']} disproved {self.pending_disproof.get('suggester_name')}'s suggestion.",
+            room=self.room_name,
+        )
+
+        # Clear pending disproof
+        self.pending_disproof = {}
+
         return {
             "success": True,
-            "messages": [intro, result_message],
-            "payload": dict(self.last_suggestion_result),
+            "card": card_name,
+            "disprover_name": disprover["name"],
+            "suggester_id": suggester_id,
+            "suggester_name": self.last_suggestion_result.get("suggester"),
+            "messages": [f"{disprover['name']} chose {card_name}."],
         }
 
     def make_accusation_action(self, player_id: int, suspect: str, weapon: str, room: str):

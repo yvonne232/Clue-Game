@@ -1,4 +1,3 @@
-import random
 from game.models import Player, Room, Hallway
 from game.game_engine.notifier import Notifier
 
@@ -20,7 +19,7 @@ class SuggestionEngine:
         Process a suggestion:
         - Move the suspect to the suggested room.
         - Iterate through other players to find who can disprove.
-        - Return (message, disproving_card or None)
+        - Return dict with pending_disproof status and disprover info (if applicable)
         """
 
         suggester_name = suggesting_player["name"]
@@ -31,7 +30,12 @@ class SuggestionEngine:
             try:
                 new_room = Room.objects.get(name=room_name)
             except Room.DoesNotExist:
-                return (f"⚠️ Room {room_name} not found.", None)
+                return {
+                    "pending_disproof": False,
+                    "first_disprover": None,
+                    "matching_cards": [],
+                    "message": f"⚠️ Room {room_name} not found.",
+                }
 
             previous_location = suspect_player["location"]
             if isinstance(previous_location, Hallway):
@@ -60,7 +64,7 @@ class SuggestionEngine:
         # Find players in order (excluding the suggester)
         player_order = self._rotate_players(suggesting_player)
 
-        # Check each for disproof
+        # Find the first player who can disprove
         for p in player_order:
             if p["eliminated"]:
                 continue
@@ -69,20 +73,31 @@ class SuggestionEngine:
                 if card in {suspect, weapon, room_name}
             ]
             if matching_cards:
-                chosen_card = random.choice(matching_cards)
-                Notifier.broadcast(
-                    f"🃏 {p['name']} disproved using {chosen_card}.",
-                    room=self.room_name,
-                )
-                return (f"{p['name']} disproved {suggester_name}'s suggestion.", chosen_card)
+                # Return pending disproof state (server will prompt player to choose) insead of random choice
+                return {
+                    "pending_disproof": True,
+                    "first_disprover": p,
+                    "matching_cards": matching_cards,
+                    "message": f"Waiting for {p['name']} to choose a card to disprove the suggestion.",
+                }    
+                # chosen_card = random.choice(matching_cards)
+                # Notifier.broadcast(
+                #     f"🃏 {p['name']} disproved using {chosen_card}.",
+                #     room=self.room_name,
+                # )
+                # return (f"{p['name']} disproved {suggester_name}'s suggestion.", chosen_card)
 
-        # 4️⃣ No one can disprove
+        # No one can disprove
         Notifier.broadcast(
             f"❌ No one could disprove {suggester_name}'s suggestion!",
             room=self.room_name,
         )
-        return (f"No one could disprove {suggester_name}'s suggestion.", None)
-
+        return {
+            "pending_disproof": False,
+            "first_disprover": None,
+            "matching_cards": [],
+            "message": f"No one could disprove {suggester_name}'s suggestion.",
+        }
     # ======================================================================
     # Helper: rotate player order
     # ======================================================================

@@ -133,6 +133,9 @@ export default function GameView({
   const [accuseRoom, setAccuseRoom] = useState(ROOMS[0]);
   const [showSuggestionForm, setShowSuggestionForm] = useState(false);
   const [showAccusationForm, setShowAccusationForm] = useState(false);
+  const [showDisproveModal, setShowDisproveModal] = useState(false);
+  const [disproofInfo, setDisproofInfo] = useState(null);
+  const [selectedDisproofCard, setSelectedDisproofCard] = useState(null);
 
   const { messages, sendMessage } = useWebSocket(roomName);
 
@@ -230,6 +233,13 @@ export default function GameView({
     }
   }, [isGameOver, isMyTurn, myPlayer]);
 
+  useEffect(() => {
+    if (isGameOver || !disproofInfo) {
+      setShowDisproveModal(false);
+      setDisproofInfo(null);
+    }
+  }, [isGameOver, disproofInfo]);
+
   const hasMovedThisTurn = Boolean(gameState?.turn_state?.has_moved);
   const lastSuggestion = gameState?.last_suggestion ?? null;
   const lastSuggestionCard = lastSuggestion?.card ?? null;
@@ -268,6 +278,32 @@ export default function GameView({
       if (matchesId || matchesName) {
         setMoveOptions(latest.options ?? []);
         setIsRequestingMoves(false);
+      }
+      return;
+    }
+
+    if (latest?.type === "disprove_prompt") {
+      setDisproofInfo({
+        disprover_id: latest.disprover_id,
+        disprover_name: latest.disprover_name,
+        suggester_name: latest.suggester_name,
+        matching_cards: latest.matching_cards,
+      });
+      
+      // Show modal only if this client is the disprover
+      if (myPlayer && String(myPlayer.id) === String(latest.disprover_id)) {
+        setShowDisproveModal(true);
+        setSelectedDisproofCard(null);
+      }
+      return;
+    }
+
+    if (latest?.type === "disproof_result") {
+      // Only show to the suggester
+      if (myPlayer && String(myPlayer.id) === String(latest.suggester_id)) {
+        // Suggester sees the card privately
+        // Could add to messages or show as a banner
+        console.log(`Card revealed: ${latest.card} disproved by ${latest.disprover_name}`);
       }
       return;
     }
@@ -347,6 +383,21 @@ export default function GameView({
   const handleSuggestionCancel = useCallback(() => {
     setShowSuggestionForm(false);
   }, []);
+
+  const handleSelectDisproofCard = useCallback(
+    (card) => {
+      if (!myPlayer) return;
+      setSelectedDisproofCard(card);
+      sendMessage({
+        type: "choose_disproving_card",
+        player_id: myPlayer.id,
+        card_name: card,
+      });
+      setShowDisproveModal(false);
+      setDisproofInfo(null);
+    },
+    [myPlayer, sendMessage],
+  );
 
   const handleAccusation = useCallback(() => {
     if (isGameOver || !isMyTurn || myPlayer?.eliminated) {
@@ -732,6 +783,30 @@ export default function GameView({
           </div>
         )}
 
+        {showDisproveModal && disproofInfo && (
+          <div className="disprove-modal suggestion-form">
+            <div className="suggestion-row">
+              <h3 style={{ marginTop: 0, marginBottom: "1rem" }}>
+                Choose a card to disprove
+              </h3>
+              <p style={{ marginBottom: "1rem" }}>
+                You can reveal one of these cards to {disproofInfo.suggester_name}:
+              </p>
+              <div className="card-options" style={{ display: "flex", flexWrap: "wrap", gap: "0.5rem" }}>
+                {disproofInfo.matching_cards.map((card) => (
+                  <button
+                    key={card}
+                    className="game-button"
+                    onClick={() => handleSelectDisproofCard(card)}
+                  >
+                    {card}
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
         {showAccusationForm && (
           <div className="suggestion-form accusation-form">
             <div className="suggestion-row">
@@ -811,10 +886,22 @@ export default function GameView({
 
         {lastSuggestionResolved && (
           <div className="suggestion-result-banner">
-            {lastSuggestionCard ? (
+            {lastSuggestionCard && myPlayer && lastSuggestion?.suggester === myPlayer.name ? (
+              // Suggester sees their own card and who disproved it
               <>
-                <strong>{lastSuggestion?.suggester}</strong>'s suggestion was disproved
+                Your suggestion was disproved by <strong>{lastSuggestion?.disprover}</strong>{' '}
                 with <strong>{lastSuggestionCard}</strong>.
+              </>
+            ) : lastSuggestionCard && myPlayer && lastSuggestion?.disprover === myPlayer.name ? (
+              // Disprover sees confirmation with card name
+              <>
+                You disproved <strong>{lastSuggestion?.suggester}</strong>'s suggestion
+                with <strong>{lastSuggestionCard}</strong>.
+              </>
+            ) : lastSuggestionCard ? (
+              // Other players see generic message
+              <>
+                <strong>{lastSuggestion?.suggester}</strong>'s suggestion was disproved.
               </>
             ) : (
               <>
