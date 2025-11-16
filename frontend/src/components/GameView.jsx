@@ -138,6 +138,7 @@ export default function GameView({
   const [selectedDisproofCard, setSelectedDisproofCard] = useState(null);
   const [showSuggestionBanner, setShowSuggestionBanner] = useState(true);
   const [previousPlayerId, setPreviousPlayerId] = useState(null);
+  const [myInitialHand, setMyInitialHand] = useState(null);
   const [pendingStatusMessage, setPendingStatusMessage] = useState(null);
 
   const { messages, sendMessage } = useWebSocket(roomName);
@@ -247,6 +248,17 @@ export default function GameView({
   const lastSuggestion = gameState?.last_suggestion ?? null;
   const lastSuggestionCard = lastSuggestion?.card ?? null;
   const lastSuggestionResolved = lastSuggestion != null;
+
+  // Capture my initial hand once when first available (baseline before future reveals)
+  useEffect(() => {
+    if (!myPlayer) return;
+    if (myInitialHand !== null) return;
+    const me = players.find((p) => String(p.id) === String(myPlayer.id));
+    const cards = Array.isArray(me?.known_cards) ? me.known_cards : [];
+    if (cards.length) {
+      setMyInitialHand([...cards]);
+    }
+  }, [players, myPlayer, myInitialHand]);
 
     useEffect(() => {
     if (!messages.length) {
@@ -646,13 +658,34 @@ export default function GameView({
                             <div className="player-location">
                   {formatLocationLabel(player)}
                             </div>
-                {player.id === myPlayer?.id &&
-                  Array.isArray(player.known_cards) &&
-                  player.known_cards.length > 0 && (
-                    <div className="player-known-cards">
-                      Known Cards: {player.known_cards.join(", ")}
-                    </div>
-                  )}
+                {player.id === myPlayer?.id && (
+                  (() => {
+                    const known = Array.isArray(player.known_cards)
+                      ? player.known_cards
+                      : [];
+                    const initial = Array.isArray(myInitialHand)
+                      ? myInitialHand
+                      : known; // fallback: if baseline not set, treat current as hand
+                    const initSet = new Set(initial);
+                    const seen = known.filter((c) => !initSet.has(c));
+                    return (
+                      <div className="player-known-cards">
+                        <div>
+                          <strong>Your Hand:</strong>{" "}
+                          {initial.length > 0 ? initial.join(", ") : "(none)"}
+                        </div>
+                        {/* Disproved cards hidden for now to match physical board game
+                        {seen.length > 0 && (
+                          <div>
+                            <strong>Disproved Cards:</strong>{" "}
+                            {seen.join(", ")}
+                          </div>
+                        )}
+                        */}
+                      </div>
+                    );
+                  })()
+                )}
                             {player.eliminated && (
                   <div className="player-eliminated">Eliminated</div>
                             )}
