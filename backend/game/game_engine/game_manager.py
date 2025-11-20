@@ -104,7 +104,8 @@ class GameManager:
                     "location_type": self._location_type(entry["location"]),
                     "eliminated": entry["eliminated"],
                     "arrived_via_suggestion": entry.get("arrived_via_suggestion", False),
-                    "known_cards": sorted(entry.get("known_cards", [])),
+                    "hand": sorted(entry.get("hand", [])),  # Original cards dealt to player
+                    "known_cards": sorted(entry.get("known_cards", [])),  # All cards known (hand + revealed)
                 }
                 for entry in self.players
             ],
