@@ -92,6 +92,104 @@ function formatLocationLabel(playerEntry) {
   return `Location: ${namePart}`;
 }
 
+// Helper: Extract hallway ID from location string
+function getHallwayId(location) {
+  if (!location) return null;
+  const match = String(location).match(/H\d{2}/);
+  return match ? match[0] : null;
+}
+
+// Helper: Get room name from location string
+function getRoomName(location) {
+  if (!location) return null;
+  const locationStr = String(location);
+  const rooms = [
+    'Kitchen', 'Ballroom', 'Conservatory', 'Dining Room', 
+    'Billiard Room', 'Library', 'Lounge', 'Hall', 'Study'
+  ];
+  for (const room of rooms) {
+    if (locationStr === room || locationStr.includes(room)) {
+      return room;
+    }
+  }
+  return null;
+}
+
+// Helper: Extract the actual room name from a player's location string
+// Handles formats like "Room - Dining Room" or just "Dining Room"
+function extractRoomNameFromLocation(locationStr) {
+  if (!locationStr) return null;
+  const str = String(locationStr);
+  const rooms = [
+    'Kitchen', 'Ballroom', 'Conservatory', 'Dining Room', 
+    'Billiard Room', 'Library', 'Lounge', 'Hall', 'Study'
+  ];
+  
+  // Try exact match first
+  if (rooms.includes(str)) {
+    return str;
+  }
+  
+  // Try to extract from " - " format
+  const parts = str.split(' - ');
+  if (parts.length > 1) {
+    const namePart = parts.slice(1).join(' - ');
+    for (const room of rooms) {
+      if (namePart === room || namePart.includes(room)) {
+        return room;
+      }
+    }
+  }
+  
+  // Try substring match (but be more careful)
+  for (const room of rooms) {
+    // Use word boundaries to avoid partial matches
+    const regex = new RegExp(`\\b${room.replace(/ /g, '\\s+')}\\b`, 'i');
+    if (regex.test(str)) {
+      return room;
+    }
+  }
+  
+  return null;
+}
+
+// Helper: Get players at a specific location
+function getPlayersAtLocation(location, players) {
+  if (!location || !players) return [];
+  const locationStr = String(location);
+  
+  return players.filter((p) => {
+    const playerLoc = p.location ? String(p.location) : '';
+    if (!playerLoc) return false;
+    
+    // Determine what type of location we're checking
+    const targetRoomName = getRoomName(locationStr);
+    const targetHallwayId = getHallwayId(locationStr);
+    
+    // If checking a room
+    if (targetRoomName) {
+      // Only match if player is actually in a room
+      if (p.location_type !== 'room') return false;
+      
+      const playerRoomName = extractRoomNameFromLocation(playerLoc);
+      // Exact match of room names
+      return playerRoomName === targetRoomName;
+    }
+    
+    // If checking a hallway
+    if (targetHallwayId) {
+      // Only match if player is actually in a hallway
+      if (p.location_type !== 'hallway') return false;
+      
+      const playerHallwayId = getHallwayId(playerLoc);
+      return targetHallwayId === playerHallwayId;
+    }
+    
+    // Exact match fallback
+    return playerLoc === locationStr;
+  });
+}
+
 export default function GameView({
   gameId: propGameId,
   initialGameState,
@@ -631,6 +729,134 @@ export default function GameView({
           </div>
         )}
             </div>
+
+            {/* Game Board */}
+            {(() => {
+              // Helper function to render player markers at a location
+              // Show all players at their current positions
+              const renderPlayerMarkers = (location) => {
+                // Get all players at this location
+                const playersHere = getPlayersAtLocation(location, players);
+                if (playersHere.length === 0) return null;
+                
+                return (
+                  <div className="player-markers">
+                    {playersHere.map((p) => {
+                      const isMyPlayer = p.id === myPlayer?.id;
+                      const isCurrentPlayer = 
+                        (currentPlayer?.id != null && String(currentPlayer.id) === String(p.id)) ||
+                        (currentPlayer?.name && currentPlayer.name === p.name);
+                      
+                      return (
+                        <span 
+                          key={p.id} 
+                          className={`player-marker ${isMyPlayer ? 'my-marker' : ''} ${isCurrentPlayer ? 'current-marker' : ''}`}
+                          title={p.name}
+                        >
+                          {p.name.split(' ').map(word => word[0]).join('')}
+                        </span>
+                      );
+                    })}
+                  </div>
+                );
+              };
+
+              return (
+                <div className="game-board">
+                  <div className="board-row">
+                    <div className="room-cell">
+                      <div className="secret-passage bottom-right" title="Secret passage to Kitchen"></div>
+                      <div className="room-name">Study</div>
+                      {renderPlayerMarkers('Study')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H12')}
+                    </div>
+                    <div className="room-cell">
+                      <div className="room-name">Hall</div>
+                      {renderPlayerMarkers('Hall')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H11')}
+                        </div>
+                    <div className="room-cell">
+                      <div className="secret-passage bottom-left" title="Secret passage to Conservatory"></div>
+                      <div className="room-name">Lounge</div>
+                      {renderPlayerMarkers('Lounge')}
+                </div>
+            </div>
+                  
+                  <div className="board-row hallway-row">
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H10')}
+                    </div>
+                    <div className="empty-cell"></div>
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H09')}
+                    </div>
+                    <div className="empty-cell"></div>
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H08')}
+                    </div>
+                  </div>
+                  <div className="board-row">
+                    <div className="room-cell">
+                      <div className="room-name">Library</div>
+                      {renderPlayerMarkers('Library')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H07')}
+                    </div>
+                    <div className="room-cell">
+                      <div className="room-name">Billiard Room</div>
+                      {renderPlayerMarkers('Billiard Room')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H06')}
+                    </div>
+                    <div className="room-cell">
+                      <div className="room-name">Dining Room</div>
+                      {renderPlayerMarkers('Dining Room')}
+                    </div>
+                  </div>
+                  <div className="board-row hallway-row">
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H05')}
+                    </div>
+                    <div className="empty-cell"></div>
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H04')}
+                    </div>
+                    <div className="empty-cell"></div>
+                    <div className="hallway-cell horizontal">
+                      {renderPlayerMarkers('H03')}
+                    </div>
+                  </div>
+                  <div className="board-row">
+                    <div className="room-cell">
+                      <div className="secret-passage top-right" title="Secret passage to Lounge"></div>
+                      <div className="room-name">Conservatory</div>
+                      {renderPlayerMarkers('Conservatory')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H02')}
+                    </div>
+                    <div className="room-cell">
+                      <div className="room-name">Ballroom</div>
+                      {renderPlayerMarkers('Ballroom')}
+                    </div>
+                    <div className="hallway-cell vertical">
+                      {renderPlayerMarkers('H01')}
+                    </div>
+                    <div className="room-cell">
+                      <div className="secret-passage top-left" title="Secret passage to Study"></div>
+                      <div className="room-name">Kitchen</div>
+                      {renderPlayerMarkers('Kitchen')}
+                    </div>
+                  </div>
+                </div>
+              );
+            })()}
 
             <div className="player-list">
                 <h3>Players</h3>
