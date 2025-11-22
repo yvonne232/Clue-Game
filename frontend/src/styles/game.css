@@ -217,6 +217,7 @@
   text-orientation: mixed;
   min-width: 26px;
   min-height: 45px;
+  margin: auto 0;
   background: linear-gradient(90deg, 
     #d4c4a8 0%,
     #e8dcc6 20%,
@@ -232,6 +233,7 @@
   border-right: 1px solid #d4c4a8;
   min-width: 40px;
   min-height: 26px;
+  margin: 0 auto;
   background: linear-gradient(0deg, 
     #d4c4a8 0%,
     #e8dcc6 20%,
