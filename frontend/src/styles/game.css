@@ -453,15 +453,22 @@
   transition: background-color 0.2s;
 }
 
-.game-button:hover {
+.game-button:hover:not(:disabled) {
   background-color: #45a049;
+}
+
+.game-button:disabled {
+  background-color: #bdbdbd;
+  color: #757575;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .game-button.secondary {
   background-color: #607d8b;
 }
 
-.game-button.secondary:hover {
+.game-button.secondary:hover:not(:disabled) {
   background-color: #546a79;
 }
 
@@ -469,7 +476,7 @@
   background-color: #f44336;
 }
 
-.game-button.warning:hover {
+.game-button.warning:hover:not(:disabled) {
   background-color: #da190b;
 }
 
@@ -477,13 +484,14 @@
   background-color: #3f51b5;
 }
 
-.game-button.movement:hover {
+.game-button.movement:hover:not(:disabled) {
   background-color: #35449b;
 }
 
 .game-button.movement:disabled {
   background-color: #9fa8da;
-  cursor: default;
+  cursor: not-allowed;
+  opacity: 0.6;
 }
 
 .game-over-panel {

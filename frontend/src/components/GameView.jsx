@@ -902,11 +902,6 @@ export default function GameView({
 
             <div className="game-controls">
         <div className="button-row">
-          {isMyTurn && !myPlayer?.eliminated && hasMovedThisTurn && (
-            <button className="game-button movement" disabled>
-              Movement complete
-            </button>
-          )}
                 <button 
                     onClick={handleMakeMove} 
                     className="game-button"

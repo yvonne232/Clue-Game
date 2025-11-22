@@ -130,14 +130,16 @@ export default function CharacterSelect({ lobbyId, onCharacterSelected }) {
                     const isTaken = takenCharacters.includes(char.name);
                     const isMyChar = isMyCharacter(char.name);
                     const isSelected = selectedChar === char.id;
+                    const canSelect = !isTaken || isMyChar;
                     return (
                         <div 
                             key={char.id} 
                             className={`character-card 
                                 ${isTaken ? 'taken' : ''} 
                                 ${isSelected ? 'selected' : ''} 
-                                ${isMyChar ? 'my-character' : ''}`}
-                            onClick={() => !isTaken && !myCharacter && selectCharacter(char)}
+                                ${isMyChar ? 'my-character' : ''}
+                                ${canSelect ? 'selectable' : ''}`}
+                            onClick={() => canSelect && !isMyChar && selectCharacter(char)}
                         >
                             <div className="character-name">{char.name}</div>
                             {isTaken && (
