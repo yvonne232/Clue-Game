@@ -735,10 +735,19 @@ export default function GameView({
                         (currentPlayer?.id != null && String(currentPlayer.id) === String(p.id)) ||
                         (currentPlayer?.name && currentPlayer.name === p.name);
                       
+                      // Determine character class for color
+                      let characterClass = '';
+                      if (p.name.includes('Scarlet')) characterClass = 'character-scarlet';
+                      else if (p.name.includes('Mustard')) characterClass = 'character-mustard';
+                      else if (p.name.includes('White')) characterClass = 'character-white';
+                      else if (p.name.includes('Green')) characterClass = 'character-green';
+                      else if (p.name.includes('Peacock')) characterClass = 'character-peacock';
+                      else if (p.name.includes('Plum')) characterClass = 'character-plum';
+                      
                       return (
                         <span 
                           key={p.id} 
-                          className={`player-marker ${isMyPlayer ? 'my-marker' : ''} ${isCurrentPlayer ? 'current-marker' : ''}`}
+                          className={`player-marker ${characterClass} ${isMyPlayer ? 'my-marker' : ''} ${isCurrentPlayer ? 'current-marker' : ''}`}
                           title={p.name}
                         >
                           {p.name.split(' ').map(word => word[0]).join('')}

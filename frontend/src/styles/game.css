@@ -268,67 +268,57 @@
 
 .secret-passage {
   position: absolute;
-  width: 18px;
-  height: 18px;
-  background: linear-gradient(135deg, #a68b6b 0%, #8b7355 100%);
-  border: 2px solid #7a6a5a;
+  width: 20px;
+  height: 20px;
+  background: linear-gradient(135deg, #8b4513 0%, #654321 100%);
+  border: 2px solid #333;
   display: flex;
   align-items: center;
   justify-content: center;
   box-shadow: 
     0 1px 4px rgba(0, 0, 0, 0.5),
-    inset 0 1px 2px rgba(139, 69, 19, 0.2),
-    inset 0 -1px 2px rgba(0, 0, 0, 0.2);
+    inset 0 1px 2px rgba(139, 69, 19, 0.2);
   z-index: 10;
   cursor: help;
+  font-weight: bold;
+  font-size: 0.65rem;
+  color: #ffd700;
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.8);
 }
 
 .secret-passage::before {
   content: "";
-  width: 9px;
-  height: 9px;
-  background: #b89d7d;
-  border: 1px solid #8b7355;
-  border-radius: 2px;
-  box-shadow: inset 0 1px 2px rgba(255, 255, 255, 0.3);
+  display: none;
 }
 
 .secret-passage::after {
-  content: "";
-  position: absolute;
-  width: 3px;
-  height: 2px;
-  background: #ffd700;
-  border-radius: 1px;
-  box-shadow: 0 0 2px rgba(255, 215, 0, 0.6);
+  position: static;
+  transform: none;
+  width: auto;
+  height: auto;
+  background: none;
+  border-radius: 0;
+  box-shadow: none;
 }
 
 .secret-passage.top-left::after {
-  /* Kitchen: top-left corner - door handle on left side */
-  top: 50%;
-  left: 2px;
-  transform: translateY(-50%);
+  /* Kitchen leads to Study (bottom-right diagonal) */
+  content: "↖";
 }
 
 .secret-passage.top-right::after {
-  /* Conservatory: top-right corner - door handle on right side */
-  top: 50%;
-  right: 2px;
-  transform: translateY(-50%);
+  /* Conservatory leads to Lounge (bottom-left diagonal) */
+  content: "↗";
 }
 
 .secret-passage.bottom-left::after {
-  /* Lounge: bottom-left corner - door handle on left side */
-  bottom: 50%;
-  left: 2px;
-  transform: translateY(50%);
+  /* Lounge leads to Conservatory (top-right diagonal) */
+  content: "↙";
 }
 
 .secret-passage.bottom-right::after {
-  /* Study: bottom-right corner - door handle on right side */
-  bottom: 50%;
-  right: 2px;
-  transform: translateY(50%);
+  /* Study leads to Kitchen (top-left diagonal) */
+  content: "↘";
 }
 
 .secret-passage.top-left {
@@ -364,28 +354,53 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 16px;
-  height: 16px;
+  width: 18px;
+  height: 18px;
   border-radius: 50%;
   background-color: #2196F3;
-  color: white;
+  color: black;
   font-weight: bold;
   font-size: 0.6rem;
-  border: 1.5px solid #1976D2;
+  border: 1px solid black;
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
+/* Character-specific colors */
+.player-marker.character-scarlet {
+  background-color: #dc143c; /* Crimson red */
+}
+
+.player-marker.character-mustard {
+  background-color: #ffd700; /* Gold/yellow */
+}
+
+.player-marker.character-white {
+  background-color: #ffffff; /* White */
+  text-shadow: 0 0 2px rgba(0, 0, 0, 0.2); /* Subtle shadow for visibility */
+}
+
+.player-marker.character-green {
+  background-color: #228b22; /* Forest green */
+}
+
+.player-marker.character-peacock {
+  background-color: #4169e1; /* Royal blue */
+}
+
+.player-marker.character-plum {
+  background-color: #4b0082; /* Indigo */
+  color: white; /* White text for dark indigo background */
+}
+
 .player-marker.my-marker {
-  background-color: #4CAF50;
-  border-color: #388E3C;
-  box-shadow: 0 0 6px rgba(76, 175, 80, 0.6);
+  box-shadow: 0 0 6px rgba(255, 215, 0, 0.8), 0 0 12px rgba(255, 215, 0, 0.6);
+  border-width: 2px;
 }
 
 .player-marker.current-marker {
-  background-color: #FF9800;
-  border-color: #F57C00;
   box-shadow: 0 0 8px rgba(255, 152, 0, 0.8);
   animation: pulse 1.5s ease-in-out infinite;
+  border-width: 2px;
 }
 
 @keyframes pulse {
