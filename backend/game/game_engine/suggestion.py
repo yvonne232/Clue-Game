@@ -56,10 +56,10 @@ class SuggestionEngine:
                 f"  {suspect} was moved to {room_name} due to the suggestion.",
                 room=self.room_name,
             )
-        elif suspect_player:
-            Notifier.broadcast(
-                f"  {suspect} is already in {room_name}.", room=self.room_name
-            )
+        # elif suspect_player:
+        #     Notifier.broadcast(
+        #         f"  {suspect} is already in {room_name}.", room=self.room_name
+        #     )
 
         # Find players in order (excluding the suggester)
         player_order = self._rotate_players(suggesting_player)

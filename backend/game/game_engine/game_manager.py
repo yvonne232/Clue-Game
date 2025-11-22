@@ -406,7 +406,7 @@ class GameManager:
         Player.objects.filter(pk=entry["player_obj"].pk).update(is_eliminated=True)
         entry["player_obj"].is_eliminated = True
         Notifier.broadcast(
-            f"💀 {entry['name']} is eliminated for a false accusation.",
+            f"💀 {entry['name']} is eliminated",
             room=self.room_name,
         )
 
