@@ -727,9 +727,13 @@ export default function GameView({
                 const playersHere = getPlayersAtLocation(location, players);
                 if (playersHere.length === 0) return null;
                 
+                // Filter out eliminated players
+                const activePlayers = playersHere.filter(p => !p.eliminated);
+                if (activePlayers.length === 0) return null;
+                
                 return (
                   <div className="player-markers">
-                    {playersHere.map((p) => {
+                    {activePlayers.map((p) => {
                       const isMyPlayer = p.id === myPlayer?.id;
                       const isCurrentPlayer = 
                         (currentPlayer?.id != null && String(currentPlayer.id) === String(p.id)) ||
