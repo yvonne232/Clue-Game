@@ -21,6 +21,7 @@ urlpatterns = [
     path('lobbies/<int:lobby_id>/leave/', views.leave_lobby, name='lobby-leave'),
     path('lobbies/<int:lobby_id>/select-character/', views.select_character, name='lobby-select-character'),
     path('lobbies/<int:lobby_id>/start/', views.start_game, name='lobby-start-game'),
+    path('lobbies/<int:lobby_id>/return-to-character-select/', views.return_to_character_select, name='lobby-return-to-character-select'),
     
     # Player endpoints
     path('player/create/', views.create_player, name='player-create'),

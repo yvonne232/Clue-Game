@@ -239,6 +239,13 @@ def join_lobby(request, lobby_id):
                     'error': f'Lobby {lobby_id} not found'
                 }, status=404)
             
+            # Check if game is in progress
+            if lobby.game_in_progress:
+                print(f"Cannot join lobby {lobby_id} - game is in progress")
+                return JsonResponse({
+                    'error': 'Cannot join lobby while game is in progress'
+                }, status=400)
+            
             if player.lobby is not None:
                 # If they're trying to join the same lobby they're already in, just return the lobby data
                 if player.lobby.id == lobby.id:
@@ -402,6 +409,40 @@ def get_lobby(request, lobby_id):
     except Exception as e:
         return JsonResponse({'error': str(e)}, status=400)
 
+@api_view(['POST'])
+def return_to_character_select(request, lobby_id):
+    """Return all players in the lobby to character select screen."""
+    try:
+        with transaction.atomic():
+            lobby = Lobby.objects.get(id=lobby_id)
+            
+            # Mark game as not in progress
+            lobby.game_in_progress = False
+            lobby.save()
+            
+            # Clean up the game session
+            game_name = f"lobby_{lobby_id}"
+            remove_session(game_name)
+            
+            # Broadcast to all clients to return to character select
+            channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"game_{lobby_id}",
+                {
+                    "type": "return_to_character_select",
+                    "message": "Returning to character select"
+                }
+            )
+            
+            return JsonResponse({
+                'success': True,
+                'message': 'All players returned to character select'
+            })
+    except Lobby.DoesNotExist:
+        return JsonResponse({'error': 'Lobby not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
 @api_view(["POST"])
 def start_game(request, lobby_id):
     try:
@@ -430,7 +471,7 @@ def start_game(request, lobby_id):
             manager = GameManager(game_name=game_name, lobby_players=players)
             register_session(game_name, manager)
 
-            lobby.status = "in_game"
+            lobby.game_in_progress = True
             lobby.save()
 
             game_state = manager.serialize_state()

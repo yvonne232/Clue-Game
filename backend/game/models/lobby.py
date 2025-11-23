@@ -6,6 +6,7 @@ class Lobby(models.Model):
     name = models.CharField(max_length=100)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
+    game_in_progress = models.BooleanField(default=False)
 
     def clean(self):
         # Check if the lobby has reached maximum capacity

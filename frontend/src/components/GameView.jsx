@@ -443,6 +443,14 @@ export default function GameView({
     }
   }, [lastSuggestionResolved, lastSuggestionCard]);
 
+  // Listen for return to character select message
+  useEffect(() => {
+    const returnMsg = messages.find(msg => msg.type === "return_to_character_select");
+    if (returnMsg && normalizedLobbyId) {
+      navigate(`/lobby/${normalizedLobbyId}`);
+    }
+  }, [messages, navigate, normalizedLobbyId]);
+
   const handleMakeMove = useCallback(() => {
     if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
       return;
@@ -568,6 +576,29 @@ export default function GameView({
                 player_id: myPlayer.id,
     });
   }, [isGameOver, isMyTurn, myPlayer, sendMessage]);
+
+  const handleReturnToCharacterSelect = useCallback(async () => {
+    if (!normalizedLobbyId) return;
+    
+    try {
+      const apiBase =
+        import.meta.env.VITE_API_BASE_URL ||
+        `${window.location.protocol}//${window.location.hostname}:8000`;
+      const response = await fetch(
+        `${apiBase}/api/lobbies/${normalizedLobbyId}/return-to-character-select/`,
+        {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+        }
+      );
+      
+      if (!response.ok) {
+        console.error("Failed to return to character select");
+      }
+    } catch (error) {
+      console.error("Error returning to character select:", error);
+    }
+  }, [normalizedLobbyId]);
 
   const handleReturnToLobby = useCallback(() => {
     const playerId = localStorage.getItem("playerId");
@@ -1145,8 +1176,17 @@ export default function GameView({
             >
               {isRestarting ? "Restarting…" : "Restart Game"}
             </button>
-            <button className="game-button secondary" onClick={handleReturnToLobby}>
-              Return to Lobby
+            <button 
+              className="game-button secondary" 
+              onClick={handleReturnToCharacterSelect}
+            >
+              Return to Character Select
+            </button>
+            <button 
+              className="game-button secondary" 
+              onClick={handleReturnToLobby}
+            >
+              Leave Lobby
             </button>
           </div>
         )}

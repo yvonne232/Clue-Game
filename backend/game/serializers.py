@@ -58,7 +58,7 @@ class LobbySerializer(serializers.ModelSerializer):
     
     class Meta:
         model = Lobby
-        fields = ['id', 'name', 'created_at', 'is_active', 'players', 'player_count']
+        fields = ['id', 'name', 'created_at', 'is_active', 'game_in_progress', 'players', 'player_count']
     
     def get_player_count(self, obj):
         count = obj.lobby_players.count()

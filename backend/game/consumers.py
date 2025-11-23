@@ -189,6 +189,13 @@ class GameConsumer(AsyncWebsocketConsumer):
     async def forward_game_state(self, event):
         await self.send_json({"type": "game_state", "game_state": event["game_state"]})
 
+    async def return_to_character_select(self, event):
+        """Notify clients to return to character select screen."""
+        await self.send_json({
+            "type": "return_to_character_select",
+            "message": event.get("message", "Returning to character select")
+        })
+
     async def game_message(self, event):
         message = event.get("message")
         if message is None:

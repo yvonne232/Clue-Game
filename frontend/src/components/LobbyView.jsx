@@ -81,7 +81,7 @@ export default function LobbyView() {
   // Set up WebSocket connection
   useEffect(() => {
     const connectWebSocket = () => {
-      if (!currentLobby) return;
+      if (!currentLobby || !isGameStarted) return;
 
       const ws = new WebSocket(`ws://127.0.0.1:8000/ws/game/${currentLobby.id}`);
       
@@ -98,9 +98,8 @@ export default function LobbyView() {
           setError(data.error);
         } else if (data.type === "game_state") {
           console.log("Received game state:", data.game_state);
-          // Add game state to messages and set game as started
+          // Add game state to messages
           setMessages(prevMessages => [...prevMessages, data]);
-          setIsGameStarted(true);
         } else if (data.type === "game.started") {
           console.log("Game started message received");
           // Add game state from game.started message
@@ -110,7 +109,10 @@ export default function LobbyView() {
               game_state: data.game_state 
             }]);
           }
-          setIsGameStarted(true);
+        } else if (data.type === "return_to_character_select") {
+          console.log("Return to character select message received");
+          setIsGameStarted(false);
+          setMessages([]);
         } else if (data.message) {
           // Handle both string and object messages
           if (typeof data.message === 'string') {
@@ -126,7 +128,9 @@ export default function LobbyView() {
 
       ws.onclose = () => {
         console.log('WebSocket disconnected. Attempting to reconnect...');
-        setTimeout(connectWebSocket, 3000);  // Attempt to reconnect after 3 seconds
+        if (isGameStarted) {
+          setTimeout(connectWebSocket, 3000);  // Attempt to reconnect after 3 seconds
+        }
       };
 
       return ws;
@@ -139,7 +143,30 @@ export default function LobbyView() {
         ws.close();
       }
     };
-  }, [isGameStarted, currentLobby]); // Only connect when game starts and we have lobby info
+  }, [isGameStarted, currentLobby]); // Connect when game starts
+
+  // Listen for game start via polling
+  useEffect(() => {
+    if (!currentLobby || isGameStarted) return;
+
+    const checkGameStatus = async () => {
+      try {
+        const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/`);
+        const data = await response.json();
+        
+        // If game_in_progress changed to true, start the game
+        if (data.game_in_progress && !isGameStarted) {
+          console.log('Game has started, transitioning to game view');
+          setIsGameStarted(true);
+        }
+      } catch (error) {
+        console.error('Error checking game status:', error);
+      }
+    };
+
+    const interval = setInterval(checkGameStatus, 1000);
+    return () => clearInterval(interval);
+  }, [currentLobby, isGameStarted]);
 
   // Handle polling for non-game state
   useEffect(() => {
@@ -377,6 +404,28 @@ export default function LobbyView() {
           onReturnToLobby={async () => {
             await leaveLobby();
             setIsGameStarted(false);
+            setMessages([]);
+          }}
+          onReturnToCharacterSelect={async () => {
+            // Call the API to return all players to character select
+            try {
+              const response = await fetch(`http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/return-to-character-select/`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                }
+              });
+              const data = await response.json();
+              if (data.success) {
+                setIsGameStarted(false);
+                setMessages([]);
+              } else {
+                setError(data.error || 'Failed to return to character select');
+              }
+            } catch (error) {
+              console.error('Error returning to character select:', error);
+              setError('Failed to return to character select');
+            }
           }}
           onRestartGame={startGame}
         />
@@ -397,8 +446,17 @@ export default function LobbyView() {
             <h2>Available Lobbies</h2>
             {lobbies.map(lobby => (
               <div key={lobby.id} className="lobby-item">
-                <span>{lobby.name} ({lobby.players.length} players)</span>
-                <button onClick={() => joinLobby(lobby.id)}>Join</button>
+                <span>
+                  {lobby.name} ({lobby.players.length} players)
+                  {lobby.game_in_progress && <span className="game-status in-progress"> - Game in Progress </span>}
+                  {!lobby.game_in_progress && <span className="game-status available"> - Available to Join </span>}
+                </span>
+                <button 
+                  onClick={() => joinLobby(lobby.id)}
+                  disabled={lobby.game_in_progress}
+                >
+                  {lobby.game_in_progress ? 'In Progress' : 'Join'}
+                </button>
               </div>
             ))}
           </div>
