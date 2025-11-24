@@ -223,7 +223,7 @@ class GameManager:
 
         self._apply_movement(entry, selected)
         self.turn_state["has_moved"] = True
-        entry["arrived_via_suggestion"] = False
+        # Don't reset arrived_via_suggestion here - it persists until turn ends
         message = f"🚶 {entry['name']} moves to {selected['name']}."
         Notifier.broadcast(message, room=self.room_name)
         return {"success": True, "messages": [message]}
@@ -507,6 +507,11 @@ class GameManager:
         if not self.players:
             return None
 
+        # Reset arrived_via_suggestion for the current player whose turn is ending
+        if self.current_index is not None:
+            current_player_entry = self.players[self.current_index]
+            current_player_entry["arrived_via_suggestion"] = False
+
         starting_index = self.current_index
         while True:
             self.current_index = (self.current_index + 1) % len(self.players)
@@ -556,7 +561,7 @@ class GameManager:
                 raise ValueError("Hallway became occupied before move could complete.")
             self._set_hallway_occupied(hallway, True)
             player_entry["location"] = hallway
-            player_entry["arrived_via_suggestion"] = False
+            # Don't reset arrived_via_suggestion here - it persists until turn ends
             Player.objects.filter(pk=player_obj.pk).update(
                 current_room=None,
                 current_hallway=hallway,
@@ -566,7 +571,7 @@ class GameManager:
         elif option_type == "room":
             room: Room = option["target"]
             player_entry["location"] = room
-            player_entry["arrived_via_suggestion"] = False
+            # Don't reset arrived_via_suggestion here - it persists until turn ends
             self.turn_state["entered_room"] = True  # Player entered a room this turn
             Player.objects.filter(pk=player_obj.pk).update(
                 current_room=room,
@@ -577,7 +582,7 @@ class GameManager:
         elif option_type == "stay":
             # Staying keeps the player in the room but counts as their movement action
             # Player must still make a suggestion since they chose to stay in the room
-            player_entry["arrived_via_suggestion"] = False
+            # Don't reset arrived_via_suggestion here - it persists until turn ends
             self.turn_state["entered_room"] = True  # Treat "stay" as entering the room for suggestion requirement
         else:
             raise ValueError("Unsupported movement option.")
