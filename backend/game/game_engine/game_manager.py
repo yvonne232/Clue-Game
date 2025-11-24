@@ -26,6 +26,7 @@ class GameManager:
             "has_moved": False,
             "made_suggestion": False,
             "has_accused": False,
+            "entered_room": False,  # Track if player entered a new room this turn
         }
         self.is_over = False
         self.winner: Optional[str] = None
@@ -243,6 +244,10 @@ class GameManager:
         if not isinstance(location, Room):
             return {"success": False, "error": "Suggestions may only be made from a room."}
 
+        # Check if player has confirmed their movement
+        if not self.turn_state["has_moved"]:
+            return {"success": False, "error": "You must confirm your movement before making a suggestion."}
+
         intro = f"{entry['name']} suggests {suspect} with {weapon} in {location.name}."
         Notifier.broadcast(intro, room=self.room_name)
         
@@ -435,11 +440,24 @@ class GameManager:
         if entry["eliminated"]:
             return {"success": False, "error": "Eliminated players cannot act."}
 
+        # Check if player must move first
         if not self.turn_state["has_moved"]:
             moves = self.get_available_moves(entry)
             non_stay_moves = [option for option in moves if option["type"] != "stay"]
             if non_stay_moves:
                 return {"success": False, "error": "You must move before ending your turn."}
+            # If only "stay" option is available or no moves at all, check if they can stay
+            stay_moves = [option for option in moves if option["type"] == "stay"]
+            if stay_moves:
+                return {"success": False, "error": "You must confirm your movement (stay in room) before ending your turn."}
+
+        # Check if player must make a suggestion
+        # Player must make a suggestion if they entered a room this turn
+        location = entry["location"]
+        if (isinstance(location, Room) and 
+            not self.turn_state["made_suggestion"] and 
+            self.turn_state["entered_room"]):
+            return {"success": False, "error": "You must make a suggestion before ending your turn."}
 
         next_player = self._advance_turn()
         if not next_player:
@@ -520,6 +538,7 @@ class GameManager:
             "has_moved": False,
             "made_suggestion": False,
             "has_accused": False,
+            "entered_room": False,  # Track if player entered a new room this turn
         }
         self._broadcast(f"🎯 {current_entry['name']} will act now.")
 
@@ -548,6 +567,7 @@ class GameManager:
             room: Room = option["target"]
             player_entry["location"] = room
             player_entry["arrived_via_suggestion"] = False
+            self.turn_state["entered_room"] = True  # Player entered a room this turn
             Player.objects.filter(pk=player_obj.pk).update(
                 current_room=room,
                 current_hallway=None,
@@ -556,7 +576,9 @@ class GameManager:
             player_obj.current_hallway = None
         elif option_type == "stay":
             # Staying keeps the player in the room but counts as their movement action
+            # Player must still make a suggestion since they chose to stay in the room
             player_entry["arrived_via_suggestion"] = False
+            self.turn_state["entered_room"] = True  # Treat "stay" as entering the room for suggestion requirement
         else:
             raise ValueError("Unsupported movement option.")
 

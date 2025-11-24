@@ -348,6 +348,9 @@ export default function GameView({
   const lastSuggestionCard = lastSuggestion?.card ?? null;
   const lastSuggestionResolved = lastSuggestion != null;
   const isDisproofInProgress = Boolean(disproofInfo);
+  
+  // Players must confirm their movement before making a suggestion
+  const canMakeSuggestion = hasMovedThisTurn;
 
     useEffect(() => {
     if (!messages.length) {
@@ -1014,7 +1017,7 @@ export default function GameView({
                 <button 
                     onClick={handleSuggestion} 
                     className="game-button"
-            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
+            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || !canMakeSuggestion || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
             title={
               !isMyTurn
                 ? "Wait for your turn"
@@ -1022,6 +1025,8 @@ export default function GameView({
                   ? "You must be in a room to make a suggestion"
                   : hasSuggestedThisTurn
                     ? "You have already made a suggestion this turn"
+                  : !canMakeSuggestion
+                    ? "You must confirm your movement before making a suggestion"
                   : isDisproofInProgress
                     ? "Waiting for suggestion to be disproved"
                   : myPlayer?.eliminated
