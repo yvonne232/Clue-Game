@@ -606,6 +606,27 @@ export default function GameView({
   const handleReturnToLobby = useCallback(() => {
     const playerId = localStorage.getItem("playerId");
     if (normalizedLobbyId && playerId) {
+      // First, return all players to character select
+      (async () => {
+        try {
+          const apiBase =
+            import.meta.env.VITE_API_BASE_URL ||
+            `${window.location.protocol}//${window.location.hostname}:8000`;
+          
+          // Call return to character select to notify other players
+          await fetch(
+            `${apiBase}/api/lobbies/${normalizedLobbyId}/return-to-character-select/`,
+            {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+            }
+          );
+        } catch (error) {
+          console.error("Failed to return players to character select:", error);
+        }
+      })();
+
+      // Then handle leave lobby for this player
       if (typeof onReturnToLobby === "function") {
         try {
           onReturnToLobby({
@@ -1186,12 +1207,6 @@ export default function GameView({
               onClick={handleReturnToCharacterSelect}
             >
               Return to Character Select
-            </button>
-            <button 
-              className="game-button secondary" 
-              onClick={handleReturnToLobby}
-            >
-              Leave Lobby
             </button>
           </div>
         )}
