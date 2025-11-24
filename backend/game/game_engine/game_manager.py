@@ -283,11 +283,7 @@ class GameManager:
                 "messages": [intro, disproof_result["message"]],
             }
         else:
-            # No one could disprove
-            Notifier.broadcast(
-                f"❌ No one could disprove {entry['name']}'s suggestion!",
-                room=self.room_name,
-            )
+            # No one could disprove (message already broadcast by suggestion engine)
             
             self.last_suggestion_result = {
                 "suspect": suspect,
@@ -303,6 +299,7 @@ class GameManager:
             return {
                 "success": True,
                 "awaiting_disproof": False,
+                "suggester_name": entry["name"],
                 "messages": [intro, disproof_result["message"]],
                 "payload": dict(self.last_suggestion_result),
             }

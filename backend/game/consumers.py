@@ -98,8 +98,17 @@ class GameConsumer(AsyncWebsocketConsumer):
                     "matching_cards": result.get("matching_cards", []),
                 },
             )
-
-        await self._broadcast_game_state()
+            await self._broadcast_game_state()
+        else:
+            # No one can disprove - send message to clear disproof state BEFORE game state
+            await self.channel_layer.group_send(
+                self.room_group_name,
+                {
+                    "type": "suggestion_not_disproved",
+                    "suggester_name": result.get("suggester_name"),
+                },
+            )
+            await self._broadcast_game_state()
 
     async def _handle_choose_disproving_card(self, data):
         player_id = data.get("player_id")
@@ -236,6 +245,13 @@ class GameConsumer(AsyncWebsocketConsumer):
             "card": card,
             "disprover_name": disprover_name,
             "suggester_name": suggester_name,
+        })
+
+    async def suggestion_not_disproved(self, event):
+        """Notify all clients that the suggestion could not be disproved."""
+        await self.send_json({
+            "type": "suggestion_not_disproved",
+            "suggester_name": event.get("suggester_name"),
         })
 
     async def _send_error(self, message: str):

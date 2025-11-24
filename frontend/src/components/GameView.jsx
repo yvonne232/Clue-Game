@@ -347,11 +347,23 @@ export default function GameView({
   const lastSuggestion = gameState?.last_suggestion ?? null;
   const lastSuggestionCard = lastSuggestion?.card ?? null;
   const lastSuggestionResolved = lastSuggestion != null;
+  const isDisproofInProgress = Boolean(disproofInfo);
 
     useEffect(() => {
     if (!messages.length) {
       return;
     }
+    
+    // Check recent messages for suggestion_not_disproved (might not be the latest)
+    const recentMessages = messages.slice(-5); // Check last 5 messages
+    const notDisprovedMsg = recentMessages.find(msg => msg?.type === "suggestion_not_disproved");
+    if (notDisprovedMsg && disproofInfo) {
+      // Clear disproof state when no one can disprove
+      console.log("Received suggestion_not_disproved, clearing disproof state");
+      setPendingStatusMessage(null);
+      setDisproofInfo(null);
+    }
+    
     const latest = messages[messages.length - 1];
 
     if (latest?.type === "game_state" && latest.game_state) {
@@ -407,6 +419,7 @@ export default function GameView({
     if (latest?.type === "disproof_result") {
       // Clear pending status when disproof is complete
       setPendingStatusMessage(null);
+      setDisproofInfo(null);
       
       // Only show to the suggester
       if (myPlayer && String(myPlayer.id) === String(latest.suggester_id)) {
@@ -417,7 +430,7 @@ export default function GameView({
       return;
     }
 
-  }, [messages, myPlayer]);
+  }, [messages, myPlayer, disproofInfo]);
 
   useEffect(() => {
     if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated) {
@@ -498,6 +511,15 @@ export default function GameView({
     if (!suspect || !weapon || !suggestRoom) {
       return;
     }
+    
+    // Immediately set disproof in progress to prevent actions during processing
+    setDisproofInfo({
+      disprover_id: null,
+      disprover_name: "pending",
+      suggester_name: myPlayer.name,
+      matching_cards: [],
+    });
+    
     sendMessage({
       type: "make_suggestion",
       player_id: myPlayer.id,
@@ -708,7 +730,8 @@ export default function GameView({
     return messages
       .map((msg, index) => {
         if (!msg || msg.type === "game_state" || msg.type === "move_options" || 
-            msg.type === "disprove_prompt" || msg.type === "disproof_result") {
+            msg.type === "disprove_prompt" || msg.type === "disproof_result" ||
+            msg.type === "suggestion_not_disproved") {
           return null;
         }
         const text =
@@ -969,7 +992,8 @@ export default function GameView({
               myPlayer?.eliminated ||
               hasMovedThisTurn ||
               isRequestingMoves ||
-              isGameOver
+              isGameOver ||
+              isDisproofInProgress
             }
             title={
               !isMyTurn
@@ -978,6 +1002,8 @@ export default function GameView({
                   ? "You have been eliminated"
                   : hasMovedThisTurn
                     ? "You have already moved this turn"
+                  : isDisproofInProgress
+                    ? "Waiting for suggestion to be disproved"
                   : isGameOver
                     ? "The game has ended"
                     : "Request available destinations"
@@ -988,7 +1014,7 @@ export default function GameView({
                 <button 
                     onClick={handleSuggestion} 
                     className="game-button"
-            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || myPlayer?.eliminated || isGameOver}
+            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
             title={
               !isMyTurn
                 ? "Wait for your turn"
@@ -996,6 +1022,8 @@ export default function GameView({
                   ? "You must be in a room to make a suggestion"
                   : hasSuggestedThisTurn
                     ? "You have already made a suggestion this turn"
+                  : isDisproofInProgress
+                    ? "Waiting for suggestion to be disproved"
                   : myPlayer?.eliminated
                     ? "You have been eliminated"
                   : isGameOver
@@ -1008,10 +1036,12 @@ export default function GameView({
                 <button 
                     onClick={handleAccusation} 
                     className="game-button warning"
-            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver}
+            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
             title={
               !isMyTurn
                 ? "Wait for your turn"
+                : isDisproofInProgress
+                  ? "Waiting for suggestion to be disproved"
                 : myPlayer?.eliminated
                   ? "You have been eliminated"
                   : isGameOver
@@ -1024,10 +1054,12 @@ export default function GameView({
           <button
             onClick={handleEndTurn}
             className="game-button secondary"
-            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver}
+            disabled={!isMyTurn || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
             title={
               !isMyTurn
                 ? "Wait for your turn"
+                : isDisproofInProgress
+                  ? "Waiting for suggestion to be disproved"
                 : myPlayer?.eliminated
                   ? "You have been eliminated"
                   : isGameOver
