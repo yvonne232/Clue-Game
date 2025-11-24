@@ -343,6 +343,7 @@ export default function GameView({
   }, [isGameOver, disproofInfo]);
 
   const hasMovedThisTurn = Boolean(gameState?.turn_state?.has_moved);
+  const hasSuggestedThisTurn = Boolean(gameState?.turn_state?.made_suggestion);
   const lastSuggestion = gameState?.last_suggestion ?? null;
   const lastSuggestionCard = lastSuggestion?.card ?? null;
   const lastSuggestionResolved = lastSuggestion != null;
@@ -966,12 +967,14 @@ export default function GameView({
                 <button 
                     onClick={handleSuggestion} 
                     className="game-button"
-            disabled={!isMyTurn || !isInRoom || myPlayer?.eliminated || isGameOver}
+            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || myPlayer?.eliminated || isGameOver}
             title={
               !isMyTurn
                 ? "Wait for your turn"
                 : !isInRoom
                   ? "You must be in a room to make a suggestion"
+                  : hasSuggestedThisTurn
+                    ? "You have already made a suggestion this turn"
                   : myPlayer?.eliminated
                     ? "You have been eliminated"
                   : isGameOver
