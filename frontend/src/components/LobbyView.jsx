@@ -14,31 +14,18 @@ export default function LobbyView() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
+  const [playerLobbyInfo, setPlayerLobbyInfo] = useState(null); // Store info about player's lobby
   
   useEffect(() => {
     // Check if player exists and create one if not
     const playerId = localStorage.getItem('playerId');
     if (!playerId) {
       createPlayer();
+    } else {
+      // Check if player is already in a lobby
+      checkPlayerLobby(playerId);
     }
-
-    // Set up page unload handler
-    const handleUnload = async () => {
-      if (currentLobby) {
-        // Create a synchronous request to leave the lobby
-        const xhr = new XMLHttpRequest();
-        xhr.open('POST', `http://127.0.0.1:8000/api/lobbies/${currentLobby.id}/leave/`, false); // false makes it synchronous
-        xhr.setRequestHeader('Content-Type', 'application/json');
-        xhr.send(JSON.stringify({ player_id: localStorage.getItem('playerId') }));
-      }
-    };
-
-    window.addEventListener('beforeunload', handleUnload);
-    
-    return () => {
-      window.removeEventListener('beforeunload', handleUnload);
-    };
-  }, [currentLobby]);
+  }, []);
   
   // Polling function for current lobby
   const pollCurrentLobby = useCallback(async () => {
@@ -239,11 +226,18 @@ export default function LobbyView() {
       
       if (data.error) {
         console.error('Error from server:', data.error);
+        setError(data.error);
         return;
       }
       
       setCurrentLobby(data);
       console.log('Current lobby state:', data);
+      
+      // Check if the lobby has a game in progress (shouldn't happen for new lobbies, but handle it)
+      if (data.game_in_progress) {
+        console.log('Lobby has game in progress');
+        setIsGameStarted(true);
+      }
       
       // Join lobby's WebSocket group
       if (socket) {
@@ -296,6 +290,12 @@ export default function LobbyView() {
       }
       
       setCurrentLobby(data);
+      
+      // Check if the lobby has a game in progress (player is rejoining)
+      if (data.game_in_progress) {
+        console.log('Rejoining lobby with game in progress');
+        setIsGameStarted(true);
+      }
     } catch (error) {
       console.error('Error joining lobby:', error);
       setError('Error joining lobby. Please try again.');
@@ -326,6 +326,7 @@ export default function LobbyView() {
           }));
         }
         setCurrentLobby(null);
+        setPlayerLobbyInfo(null); // Clear player lobby info
         fetchLobbies();
         return true;
       }
@@ -357,6 +358,29 @@ export default function LobbyView() {
       localStorage.removeItem('currentGamePlayerId');
     } catch (error) {
       console.error('Error creating player:', error);
+    }
+  };
+
+  const checkPlayerLobby = async (playerId) => {
+    try {
+      const response = await fetch(`http://127.0.0.1:8000/api/player/${playerId}/lobby/`);
+      const data = await response.json();
+      
+      if (data.lobby) {
+        console.log('Player is already in a lobby:', data.lobby);
+        setPlayerLobbyInfo(data.lobby); // Store lobby info for display
+        setCurrentLobby(data.lobby);
+        
+        // If the lobby has a game in progress, rejoin the game
+        if (data.lobby.game_in_progress) {
+          console.log('Rejoining game in progress');
+          setIsGameStarted(true);
+        }
+      } else {
+        setPlayerLobbyInfo(null);
+      }
+    } catch (error) {
+      console.error('Error checking player lobby:', error);
     }
   };
 
@@ -431,6 +455,23 @@ export default function LobbyView() {
         />
       ) : !currentLobby ? (
         <>
+          {playerLobbyInfo && (
+            <div className="info-banner" style={{
+              backgroundColor: '#e3f2fd',
+              padding: '15px',
+              marginBottom: '20px',
+              borderRadius: '5px',
+              border: '1px solid #2196f3'
+            }}>
+              <strong>Note:</strong> You are currently a member of lobby "{playerLobbyInfo.name}". 
+              {playerLobbyInfo.game_in_progress ? (
+                <span> A game is in progress. Click "Join" below to rejoin the game.</span>
+              ) : (
+                <span> Click "Join" below to return to your lobby.</span>
+              )}
+            </div>
+          )}
+          
           <div className="create-lobby">
             <h2>Create New Lobby</h2>
             <input
@@ -448,14 +489,19 @@ export default function LobbyView() {
               <div key={lobby.id} className="lobby-item">
                 <span>
                   {lobby.name} ({lobby.players.length} players)
-                  {lobby.game_in_progress && <span className="game-status in-progress"> - Game in Progress </span>}
-                  {!lobby.game_in_progress && <span className="game-status available"> - Available to Join </span>}
+                  {playerLobbyInfo && lobby.id === playerLobbyInfo.id && (
+                    <span style={{ color: '#2196f3', fontWeight: 'bold' }}> ← Your Lobby</span>
+                  )}
+                  {lobby.game_in_progress && <span className="game-status in-progress"> </span>}
+                  {!lobby.game_in_progress && <span className="game-status available"> </span>}
                 </span>
                 <button 
                   onClick={() => joinLobby(lobby.id)}
-                  disabled={lobby.game_in_progress}
+                  disabled={lobby.game_in_progress && (!playerLobbyInfo || lobby.id !== playerLobbyInfo.id)}
                 >
-                  {lobby.game_in_progress ? 'In Progress' : 'Join'}
+                  {playerLobbyInfo && lobby.id === playerLobbyInfo.id 
+                    ? (lobby.game_in_progress ? 'Rejoin Game' : 'Return to Lobby')
+                    : (lobby.game_in_progress ? 'In Progress' : 'Join')}
                 </button>
               </div>
             ))}

@@ -194,6 +194,7 @@ export default function GameView({
   gameId: propGameId,
   initialGameState,
   onReturnToLobby,
+  onReturnToCharacterSelect,
   onRestartGame,
 }) {
   const { lobbyId } = useParams();
@@ -446,10 +447,11 @@ export default function GameView({
   // Listen for return to character select message
   useEffect(() => {
     const returnMsg = messages.find(msg => msg.type === "return_to_character_select");
-    if (returnMsg && normalizedLobbyId) {
-      navigate(`/lobby/${normalizedLobbyId}`);
+    if (returnMsg && onReturnToCharacterSelect) {
+      console.log("Received return to character select message, calling callback");
+      onReturnToCharacterSelect();
     }
-  }, [messages, navigate, normalizedLobbyId]);
+  }, [messages, onReturnToCharacterSelect]);
 
   const handleMakeMove = useCallback(() => {
     if (!isMyTurn || myPlayer?.eliminated || isGameOver) {

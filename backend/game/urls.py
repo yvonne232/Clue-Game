@@ -25,4 +25,5 @@ urlpatterns = [
     
     # Player endpoints
     path('player/create/', views.create_player, name='player-create'),
+    path('player/<str:player_id>/lobby/', views.get_player_lobby, name='player-get-lobby'),
 ]

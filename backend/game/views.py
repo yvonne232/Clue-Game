@@ -72,6 +72,22 @@ def create_player(request):
         print(f"Error in create_player: {str(e)}")
         return JsonResponse({'error': str(e)}, status=400)
 
+@api_view(['GET'])
+def get_player_lobby(request, player_id):
+    """Get the current lobby for a player."""
+    try:
+        player = LobbyPlayer.objects.get(id=player_id)
+        
+        if player.lobby is None:
+            return JsonResponse({'lobby': None})
+        
+        serializer = LobbySerializer(player.lobby)
+        return JsonResponse({'lobby': serializer.data})
+    except LobbyPlayer.DoesNotExist:
+        return JsonResponse({'error': 'Player not found'}, status=404)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=400)
+
 from django.db import transaction
 from django.core.exceptions import ValidationError
 
@@ -239,9 +255,12 @@ def join_lobby(request, lobby_id):
                     'error': f'Lobby {lobby_id} not found'
                 }, status=404)
             
-            # Check if game is in progress
-            if lobby.game_in_progress:
-                print(f"Cannot join lobby {lobby_id} - game is in progress")
+            # Check if player is already in this lobby (rejoining)
+            is_rejoining = player.lobby is not None and player.lobby.id == lobby.id
+            
+            # Check if game is in progress and player is NOT a member of this lobby
+            if lobby.game_in_progress and not is_rejoining:
+                print(f"Cannot join lobby {lobby_id} - game is in progress and player is not a member")
                 return JsonResponse({
                     'error': 'Cannot join lobby while game is in progress'
                 }, status=400)
