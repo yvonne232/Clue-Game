@@ -113,6 +113,7 @@ class GameManager:
                     "arrived_via_suggestion": entry.get("arrived_via_suggestion", False),
                     "hand": sorted(entry.get("hand", [])),  # Original cards dealt to player
                     "known_cards": sorted(entry.get("known_cards", [])),  # All cards known (hand + revealed)
+                    "possible_solution_cards": self._get_possible_solution_cards(entry),  # Cards that could be in solution
                 }
                 for entry in self.players
             ],
@@ -123,6 +124,23 @@ class GameManager:
             "is_over": self.is_over,
             "winner": self.winner,
             "last_suggestion": self.last_suggestion_result,
+        }
+
+    def _get_possible_solution_cards(self, player_entry: Dict) -> Dict:
+        """
+        Calculate which cards could still be in the solution from this player's perspective.
+        A card is NOT in the solution if:
+        - The player has it in their hand
+        - The player has seen it revealed by another player
+        """
+        from game.game_engine.constants import SUSPECTS, WEAPONS, ROOMS
+        
+        known_cards = set(player_entry.get("known_cards", []))
+        
+        return {
+            "suspects": [s for s in SUSPECTS if s not in known_cards],
+            "weapons": [w for w in WEAPONS if w not in known_cards],
+            "rooms": [r for r in ROOMS if r not in known_cards],
         }
 
     def get_player_entry(self, player_id: int) -> Optional[Dict]:

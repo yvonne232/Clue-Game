@@ -7,6 +7,7 @@ import React, {
 import { useNavigate, useParams } from "react-router-dom";
 
 import useWebSocket from "../hooks/useWebSocket";
+import SolutionTracker from "./SolutionTracker";
 import "../styles/game.css";
 
 const SUSPECTS = [
@@ -1332,6 +1333,10 @@ export default function GameView({
                     </div>
         )}
             </div>
+
+        {myPlayer && myPlayer.possible_solution_cards && (
+          <SolutionTracker possibleCards={myPlayer.possible_solution_cards} />
+        )}
         </div>
     );
 }

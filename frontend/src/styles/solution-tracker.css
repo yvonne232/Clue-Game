@@ -1,0 +1,89 @@
+.solution-tracker {
+  background: white;
+  border-radius: 6px;
+  padding: 12px;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-top: 10px;
+}
+
+.solution-tracker h3 {
+  margin: 0 0 6px 0;
+  font-size: 1.1rem;
+  color: #333;
+}
+
+.tracker-description {
+  margin: 0 0 10px 0;
+  font-size: 0.8rem;
+  color: #666;
+  font-style: italic;
+}
+
+.tracker-sections {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.tracker-section {
+  background: #f9f9f9;
+  border-radius: 4px;
+  padding: 10px;
+  border: 1px solid #e0e0e0;
+}
+
+.tracker-section h4 {
+  margin: 0 0 8px 0;
+  font-size: 0.9rem;
+  color: #555;
+  border-bottom: 2px solid #ddd;
+  padding-bottom: 4px;
+}
+
+.tracker-cards {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.tracker-card {
+  padding: 6px 8px;
+  border-radius: 4px;
+  font-size: 0.8rem;
+  font-weight: 500;
+  border: 1px solid;
+  transition: all 0.2s ease;
+}
+
+.tracker-card.suspect {
+  background: #fff3e0;
+  border-color: #ff9800;
+  color: #e65100;
+}
+
+.tracker-card.weapon {
+  background: #fce4ec;
+  border-color: #e91e63;
+  color: #880e4f;
+}
+
+.tracker-card.room {
+  background: #e8f5e9;
+  border-color: #4caf50;
+  color: #1b5e20;
+}
+
+.tracker-empty {
+  padding: 8px;
+  text-align: center;
+  color: #999;
+  font-size: 0.75rem;
+  font-style: italic;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .tracker-sections {
+    grid-template-columns: 1fr;
+  }
+}
