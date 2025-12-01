@@ -1,5 +1,5 @@
 // frontend/src/components/LobbyView.jsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useRef } from 'react';
 import CharacterSelect from './CharacterSelect';
 import GameView from './GameView';
 import '../styles/game.css';
@@ -14,6 +14,7 @@ export default function LobbyView() {
   const [isGameStarted, setIsGameStarted] = useState(false);
   const [messages, setMessages] = useState([]);
   const [socket, setSocket] = useState(null);
+  const socketRef = useRef(null);
   const [playerLobbyInfo, setPlayerLobbyInfo] = useState(null); // Store info about player's lobby
   
   useEffect(() => {
@@ -67,17 +68,37 @@ export default function LobbyView() {
   // Set up polling intervals
   // Set up WebSocket connection
   useEffect(() => {
-    const connectWebSocket = () => {
-      if (!currentLobby || !isGameStarted) return;
+    if (!currentLobby || !isGameStarted) {
+      // Close existing socket if we leave the lobby or game stops
+      if (socketRef.current) {
+        socketRef.current.close();
+        socketRef.current = null;
+        setSocket(null);
+      }
+      return;
+    }
 
-      const ws = new WebSocket(`ws://127.0.0.1:8000/ws/game/${currentLobby.id}`);
-      
-      ws.onopen = () => {
-        console.log('WebSocket connected');
-        setSocket(ws);
-      };
+    // Don't create a new socket if one already exists
+    if (socketRef.current && socketRef.current.readyState === WebSocket.OPEN) {
+      return;
+    }
 
-      ws.onmessage = (event) => {
+    let isMounted = true;
+    const lobbyId = currentLobby.id;
+    const wsUrl = `ws://127.0.0.1:8000/ws/game/${lobbyId}`;
+    
+    console.log(`Attempting to connect to WebSocket: ${wsUrl}`);
+    const ws = new WebSocket(wsUrl);
+    socketRef.current = ws;
+    
+    ws.onopen = () => {
+      console.log('✅ WebSocket connected successfully to:', wsUrl);
+      setSocket(ws);
+      setError(null); // Clear any previous errors
+    };
+
+    ws.onmessage = (event) => {
+      try {
         const data = JSON.parse(event.data);
         console.log('WebSocket message received:', data);
         
@@ -85,11 +106,9 @@ export default function LobbyView() {
           setError(data.error);
         } else if (data.type === "game_state") {
           console.log("Received game state:", data.game_state);
-          // Add game state to messages
           setMessages(prevMessages => [...prevMessages, data]);
         } else if (data.type === "game.started") {
           console.log("Game started message received");
-          // Add game state from game.started message
           if (data.game_state) {
             setMessages(prevMessages => [...prevMessages, { 
               type: 'game_state', 
@@ -101,33 +120,52 @@ export default function LobbyView() {
           setIsGameStarted(false);
           setMessages([]);
         } else if (data.message) {
-          // Handle both string and object messages
           if (typeof data.message === 'string') {
             setMessages(prevMessages => [...prevMessages, { type: 'info', text: data.message }]);
           } else {
             setMessages(prevMessages => [...prevMessages, data.message]);
           }
         }
-      };      ws.onerror = (error) => {
-        console.error('WebSocket error:', error);
-        setError('WebSocket connection error');
-      };
-
-      ws.onclose = () => {
-        console.log('WebSocket disconnected. Attempting to reconnect...');
-        if (isGameStarted) {
-          setTimeout(connectWebSocket, 3000);  // Attempt to reconnect after 3 seconds
-        }
-      };
-
-      return ws;
+      } catch (parseError) {
+        console.error('Error parsing WebSocket message:', parseError, 'Raw data:', event.data);
+      }
     };
 
-    const ws = connectWebSocket();
+    ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+      console.error('WebSocket URL:', wsUrl);
+      console.error('WebSocket readyState:', ws.readyState);
+      
+      if (ws.readyState === WebSocket.CLOSED || ws.readyState === WebSocket.CLOSING) {
+        setError('WebSocket connection failed. Make sure the Django server is running with ASGI (e.g., daphne or uvicorn).');
+      } else {
+        setError('WebSocket connection error - check if backend server is running with WebSocket support');
+      }
+    };
+
+    ws.onclose = (event) => {
+      console.log('WebSocket disconnected. Code:', event.code, 'Reason:', event.reason || 'No reason provided');
+      console.log('Was clean close:', event.wasClean);
+      
+      if (!isMounted) return;
+      
+      if (event.wasClean) {
+        console.log('WebSocket closed cleanly');
+        return;
+      }
+      
+      // Connection lost - clear the ref
+      socketRef.current = null;
+      setSocket(null);
+    };
     
     return () => {
-      if (ws) {
+      isMounted = false;
+      if (ws && ws.readyState !== WebSocket.CLOSED && ws.readyState !== WebSocket.CLOSING) {
         ws.close();
+      }
+      if (socketRef.current === ws) {
+        socketRef.current = null;
       }
     };
   }, [isGameStarted, currentLobby]); // Connect when game starts

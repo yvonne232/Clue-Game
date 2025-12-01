@@ -270,6 +270,19 @@ export default function GameView({
     }
     }, [players]);
 
+  // Timeout for movement options request
+  useEffect(() => {
+    if (!isRequestingMoves) return;
+    
+    const timeoutId = setTimeout(() => {
+      console.warn('Movement options timeout - no response received after 5 seconds');
+      setIsRequestingMoves(false);
+      setMoveOptions([]);
+    }, 5000); // 5 second timeout
+    
+    return () => clearTimeout(timeoutId);
+  }, [isRequestingMoves]);
+
   const isGameActive = useMemo(
     () =>
       Boolean(
@@ -393,8 +406,31 @@ export default function GameView({
         (latest.player_name === myPlayer?.name ||
           latest.player_name === storedCharacter);
 
+      console.log('Received move_options:', {
+        playerId,
+        player_name: latest.player_name,
+        options: latest.options,
+        myPlayerId: myPlayer?.id,
+        myPlayerName: myPlayer?.name,
+        storedGameId,
+        storedCharacter,
+        matchesId,
+        matchesName
+      });
+
       if (matchesId || matchesName) {
-        setMoveOptions(latest.options ?? []);
+        const options = latest.options ?? [];
+        console.log('Setting move options:', options);
+        setMoveOptions(options);
+        setIsRequestingMoves(false);
+      } else {
+        console.warn('Move options received but player ID/name mismatch:', {
+          receivedPlayerId: playerId,
+          receivedPlayerName: latest.player_name,
+          myPlayerId: myPlayer?.id,
+          myPlayerName: myPlayer?.name
+        });
+        // Still reset the requesting state to prevent UI from being stuck
         setIsRequestingMoves(false);
       }
       return;
@@ -433,7 +469,19 @@ export default function GameView({
       return;
     }
 
-  }, [messages, myPlayer, disproofInfo]);
+    // Handle errors that might occur during movement
+    if (latest?.type === "error" && isRequestingMoves) {
+      const errorText = latest.message || latest.error || "";
+      if (errorText.toLowerCase().includes("move") || 
+          errorText.toLowerCase().includes("movement") ||
+          errorText.toLowerCase().includes("unable to move")) {
+        console.error('Movement error received:', errorText);
+        setIsRequestingMoves(false);
+        setMoveOptions([]);
+      }
+    }
+
+  }, [messages, myPlayer, disproofInfo, isRequestingMoves]);
 
   useEffect(() => {
     if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated) {
@@ -474,11 +522,13 @@ export default function GameView({
     if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
       return;
     }
+    console.log('Requesting movement options for player:', myPlayer.id, myPlayer.name);
     setIsRequestingMoves(true);
     setMoveOptions([]);
-        sendMessage({
+    
+    sendMessage({
       type: "make_move",
-            player_id: myPlayer.id,
+      player_id: myPlayer.id,
     });
   }, [isGameOver, isMyTurn, myPlayer, sendMessage]);
 
