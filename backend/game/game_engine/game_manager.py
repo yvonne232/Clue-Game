@@ -1,4 +1,5 @@
 import uuid
+import random
 from typing import Dict, List, Optional
 
 from django.db import models
@@ -69,12 +70,17 @@ class GameManager:
         self.suggestion_engine = SuggestionEngine(self.players, room_name=self.room_name)
         self.accusation_engine = AccusationEngine(self.solution, room_name=self.room_name)
 
-        # Choose the first player (Miss Scarlet goes first if present)
-        first_index = 0
+        # Choose the first player (Miss Scarlet goes first if present, otherwise random)
+        first_index = None
         for idx, entry in enumerate(self.players):
             if entry["name"] == "Miss Scarlet":
                 first_index = idx
                 break
+        
+        # If Miss Scarlet is not in the game, choose a random starting player
+        if first_index is None:
+            first_index = random.randint(0, len(self.players) - 1)
+        
         self._switch_to_player(first_index)
         Notifier.broadcast("✅ Game initialized successfully!", room=self.room_name)
 
