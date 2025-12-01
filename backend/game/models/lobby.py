@@ -3,7 +3,7 @@ from django.core.exceptions import ValidationError
 
 class Lobby(models.Model):
     """Represents a game lobby where players can join before starting a game."""
-    name = models.CharField(max_length=100)
+    name = models.CharField(max_length=100, unique=True)
     created_at = models.DateTimeField(auto_now_add=True)
     is_active = models.BooleanField(default=True)
     game_in_progress = models.BooleanField(default=False)

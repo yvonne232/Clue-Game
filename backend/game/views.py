@@ -124,6 +124,13 @@ def create_new_lobby(request):
                     'error': 'Player is already in another lobby'
                 }, status=400)
             
+            # Check if a lobby with this name already exists
+            if Lobby.objects.filter(name=name).exists():
+                print(f"Lobby with name '{name}' already exists")
+                return JsonResponse({
+                    'error': 'A lobby with this name already exists'
+                }, status=400)
+            
             # Create the lobby
             print(f"Creating new lobby with name: {name}")
             lobby = Lobby.objects.create(name=name)
