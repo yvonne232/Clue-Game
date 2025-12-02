@@ -239,8 +239,9 @@ export default function GameView({
   const [showSuggestionBanner, setShowSuggestionBanner] = useState(true);
   const [previousPlayerId, setPreviousPlayerId] = useState(null);
   const [pendingStatusMessage, setPendingStatusMessage] = useState(null);
+  const [scoreSheetResetKey, setScoreSheetResetKey] = useState(0);
 
-  const { messages, sendMessage } = useWebSocket(roomName);
+  const { messages, sendMessage, clearMessages } = useWebSocket(roomName);
 
     useEffect(() => {
     const storedGameId = localStorage.getItem("currentGamePlayerId");
@@ -490,6 +491,15 @@ export default function GameView({
       return;
     }
 
+    // Handle clear_log message from backend when game is restarted
+    if (latest?.type === "clear_log") {
+      clearMessages();
+      // Increment reset key to trigger score sheet reset
+      setScoreSheetResetKey(prev => prev + 1);
+      console.log("Game log and score sheet cleared by server");
+      return;
+    }
+
     // Handle errors that might occur during movement
     if (latest?.type === "error" && isRequestingMoves) {
       const errorText = latest.message || latest.error || "";
@@ -502,7 +512,7 @@ export default function GameView({
       }
     }
 
-  }, [messages, myPlayer, disproofInfo, isRequestingMoves]);
+  }, [messages, myPlayer, disproofInfo, isRequestingMoves, clearMessages, roomName]);
 
   useEffect(() => {
     if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated) {
@@ -774,6 +784,7 @@ export default function GameView({
       return;
     }
     setIsRestarting(true);
+    // Backend will broadcast clear_log to all players via WebSocket
     try {
       if (typeof onRestartGame === "function") {
         await onRestartGame({ lobbyId: normalizedLobbyId });
@@ -1417,7 +1428,11 @@ export default function GameView({
         )}
             </div>
 
-        <ClueScoreSheet myPlayer={myPlayer} gameId={roomName} />
+        <ClueScoreSheet 
+          myPlayer={myPlayer} 
+          gameId={roomName}
+          resetKey={scoreSheetResetKey}
+        />
         </div>
     );
 }

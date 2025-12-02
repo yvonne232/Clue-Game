@@ -38,7 +38,7 @@ const MARK_STATES = {
   MAYBE: "maybe"
 };
 
-function ClueScoreSheet({ myPlayer, gameId }) {
+function ClueScoreSheet({ myPlayer, gameId, resetKey }) {
   // Load marked items from localStorage
   const loadMarkedItems = () => {
     if (!gameId) return { suspects: {}, weapons: {}, rooms: {} };
@@ -55,6 +55,17 @@ function ClueScoreSheet({ myPlayer, gameId }) {
   };
 
   const [markedItems, setMarkedItems] = useState(loadMarkedItems);
+
+  // Clear marks when resetKey changes (game restarted)
+  useEffect(() => {
+    if (resetKey !== undefined && resetKey > 0) {
+      // Clear localStorage and reset state
+      if (gameId) {
+        localStorage.removeItem(`clueScoreSheet_${gameId}`);
+      }
+      setMarkedItems({ suspects: {}, weapons: {}, rooms: {} });
+    }
+  }, [resetKey, gameId]);
 
   // Clear marks when gameId changes (new game started)
   useEffect(() => {

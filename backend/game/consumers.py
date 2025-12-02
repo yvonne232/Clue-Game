@@ -254,6 +254,12 @@ class GameConsumer(AsyncWebsocketConsumer):
             "suggester_name": event.get("suggester_name"),
         })
 
+    async def clear_log(self, event):
+        """Notify all clients to clear their game log."""
+        await self.send_json({
+            "type": "clear_log",
+        })
+
     async def _send_error(self, message: str):
         await self.send_json({"type": "error", "message": message})
 

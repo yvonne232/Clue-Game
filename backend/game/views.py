@@ -500,8 +500,14 @@ def start_game(request, lobby_id):
             lobby.game_in_progress = True
             lobby.save()
 
-            game_state = manager.serialize_state()
+            # Broadcast clear_log message to all players before sending game state
             channel_layer = get_channel_layer()
+            async_to_sync(channel_layer.group_send)(
+                f"game_{lobby_id}",
+                {"type": "clear_log"},
+            )
+
+            game_state = manager.serialize_state()
             async_to_sync(channel_layer.group_send)(
                 f"game_{lobby_id}",
                 {"type": "forward_game_state", "game_state": game_state},
