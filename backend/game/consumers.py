@@ -164,8 +164,13 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self._send_error(result.get("error", "Accusation failed."))
             return
 
+        # Always broadcast game state first, even if game is over
+        # This ensures all players see the winner before session is removed
         await self._broadcast_game_state()
         if result.get("game_over"):
+            # Give a small delay to ensure the broadcast is sent before removing session
+            import asyncio
+            await asyncio.sleep(0.1)
             await self._remove_session()
 
     async def _handle_end_turn(self, data):
@@ -179,8 +184,13 @@ class GameConsumer(AsyncWebsocketConsumer):
             await self._send_error(result.get("error", "Unable to end turn."))
             return
 
+        # Always broadcast game state first, even if game is over
+        # This ensures all players see the winner before session is removed
         await self._broadcast_game_state()
         if result.get("game_over"):
+            # Give a small delay to ensure the broadcast is sent before removing session
+            import asyncio
+            await asyncio.sleep(0.1)
             await self._remove_session()
 
     async def _broadcast_game_state(self):

@@ -168,14 +168,31 @@ class GameManager:
             for room in (location.room1, location.room2):
                 options.append({"name": room.name, "type": "room", "target": room})
         elif isinstance(location, Room):
+            # Get all hallways connected to this room
             hallways = Hallway.objects.filter(
                 models.Q(room1=location) | models.Q(room2=location),
-                is_occupied=False,
             ).select_related("room1", "room2")
+            
+            # Filter out hallways that are occupied by active (non-eliminated) players
             for hallway in hallways:
-                options.append(
-                    {"name": hallway.name, "type": "hallway", "target": hallway}
-                )
+                # Check if hallway is actually occupied by an active player
+                is_occupied_by_active = False
+                if hallway.is_occupied:
+                    # Check if any active player is in this hallway
+                    for entry in self.players:
+                        if (not entry["eliminated"] and 
+                            isinstance(entry["location"], Hallway) and
+                            entry["location"].id == hallway.id):
+                            is_occupied_by_active = True
+                            break
+                
+                if not is_occupied_by_active:
+                    # Free the hallway if it's marked occupied but no active player is there
+                    if hallway.is_occupied:
+                        self._set_hallway_occupied(hallway, False)
+                    options.append(
+                        {"name": hallway.name, "type": "hallway", "target": hallway}
+                    )
 
             # Secret passage (if any)
             for connected_room in location.connected_rooms.all():
@@ -452,6 +469,12 @@ class GameManager:
         entry["eliminated"] = True
         Player.objects.filter(pk=entry["player_obj"].pk).update(is_eliminated=True)
         entry["player_obj"].is_eliminated = True
+        
+        # Free the hallway if the eliminated player was in one
+        location = entry["location"]
+        if isinstance(location, Hallway):
+            self._set_hallway_occupied(location, False)
+        
         Notifier.broadcast(
             f"💀 {entry['name']} is eliminated",
             room=self.room_name,

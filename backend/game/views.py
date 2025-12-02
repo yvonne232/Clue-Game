@@ -492,6 +492,7 @@ def start_game(request, lobby_id):
             # Delete existing game and its related objects (solution will cascade)
             Game.objects.filter(name=game_name).delete()
             Player.objects.filter(game__name=game_name).delete()
+            # Clear all hallway occupancy and eliminated status
             Hallway.objects.all().update(is_occupied=False)
 
             manager = GameManager(game_name=game_name, lobby_players=players)
