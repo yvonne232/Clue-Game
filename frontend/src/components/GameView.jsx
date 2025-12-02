@@ -7,7 +7,7 @@ import React, {
 import { useNavigate, useParams } from "react-router-dom";
 
 import useWebSocket from "../hooks/useWebSocket";
-import SolutionTracker from "./SolutionTracker";
+import ClueScoreSheet from "./ClueScoreSheet";
 import "../styles/game.css";
 
 const SUSPECTS = [
@@ -390,6 +390,25 @@ export default function GameView({
       setGameState(latest.game_state);
       setPlayers(incomingPlayers);
       setCurrentPlayer(normalizeCurrentPlayer(latest.game_state.current_player));
+      
+      // Clear disproof state if the last suggestion result shows a card was revealed
+      // This means the disproof is complete
+      if (disproofInfo && latest.game_state.last_suggestion) {
+        const lastSuggestion = latest.game_state.last_suggestion;
+        if (lastSuggestion.card && lastSuggestion.disprover) {
+          // Disproof is complete - clear the state
+          console.log("Disproof complete based on game state, clearing disproofInfo");
+          setDisproofInfo(null);
+          setPendingStatusMessage(null);
+          setShowDisproveModal(false);
+        } else if (!lastSuggestion.card && !lastSuggestion.disprover && lastSuggestion.suggester) {
+          // No one could disprove - clear the state
+          console.log("No one could disprove, clearing disproofInfo");
+          setDisproofInfo(null);
+          setPendingStatusMessage(null);
+          setShowDisproveModal(false);
+        }
+      }
       return;
     }
 
@@ -460,6 +479,7 @@ export default function GameView({
       // Clear pending status when disproof is complete
       setPendingStatusMessage(null);
       setDisproofInfo(null);
+      setShowDisproveModal(false);
       
       // Only show to the suggester
       if (myPlayer && String(myPlayer.id) === String(latest.suggester_id)) {
@@ -503,12 +523,12 @@ export default function GameView({
     }
   }, [gameState?.current_player?.id, previousPlayerId]);
 
-  // Show banner when new suggestion is resolved
+  // Show banner when new suggestion is resolved (either disproved or not disproved)
   useEffect(() => {
-    if (lastSuggestionResolved && lastSuggestionCard) {
+    if (lastSuggestionResolved) {
       setShowSuggestionBanner(true);
     }
-  }, [lastSuggestionResolved, lastSuggestionCard]);
+  }, [lastSuggestionResolved]);
 
   // Listen for return to character select message
   useEffect(() => {
@@ -574,9 +594,9 @@ export default function GameView({
       matching_cards: [],
     });
     
-    sendMessage({
+        sendMessage({
       type: "make_suggestion",
-      player_id: myPlayer.id,
+            player_id: myPlayer.id,
       suspect,
       weapon,
       room: suggestRoom,
@@ -823,7 +843,7 @@ export default function GameView({
     return (
         <div className="game-view">
             <div className="game-header">
-                <h2>Clue-Less Game</h2>
+                <h2>CLUE LESS Game</h2>
                 <div className="turn-indicator">
           {isGameOver ? (
                         <div>
@@ -850,7 +870,10 @@ export default function GameView({
         )}
             </div>
 
-            {/* Game Board */}
+            {/* Main Game Layout: Board on left, Hand sidebar on right */}
+            <div className="game-main-layout">
+              {/* Game Board */}
+              <div className="game-board-container">
             {(() => {
               // Helper function to render player markers at a location
               // Show all players at their current positions
@@ -918,7 +941,7 @@ export default function GameView({
                       {renderPlayerMarkers('Lounge')}
                 </div>
             </div>
-                  
+
                   <div className="board-row hallway-row">
                     <div className="hallway-cell horizontal">
                       {renderPlayerMarkers('H10')}
@@ -991,6 +1014,7 @@ export default function GameView({
               );
             })()}
 
+            {/* Players list and controls below the board */}
             <div className="player-list">
                 <h3>Players</h3>
                 <div className="players">
@@ -999,36 +1023,14 @@ export default function GameView({
               (currentPlayer?.id != null &&
                 String(currentPlayer.id) === String(player.id)) ||
               (currentPlayer?.name && currentPlayer.name === player.name);
-            const cardClass = [
-              "player-card",
-              player.id === myPlayer?.id ? "my-player" : "",
-              isCurrent ? "current-player" : "",
-              player.eliminated ? "eliminated" : "",
-            ]
-              .filter(Boolean)
-              .join(" ");
 
             return (
-              <div key={player.id} className={cardClass}>
-                            <div className="player-name">
-                  {player.name} {player.id === myPlayer?.id ? "(You)" : ""}
-                  {isCurrent && <span className="current-turn-marker">🎯</span>}
-                            </div>
-                            <div className="player-location">
-                  {formatLocationLabel(player)}
-                            </div>
-                {player.id === myPlayer?.id && (
-                  <div className="player-known-cards">
-                    <div>
-                      <strong>Your Hand:</strong>{" "}
-                      {Array.isArray(player.hand) && player.hand.length > 0 
-                        ? player.hand.join(", ") 
-                        : "(none)"}
-                    </div>
-                  </div>
-                )}
+              <div key={player.id} className="player-name-only">
+                {player.name}
+                {player.id === myPlayer?.id && " (You)"}
+                {isCurrent && <span className="current-turn-marker">🎯</span>}
                             {player.eliminated && (
-                  <div className="player-eliminated">Eliminated</div>
+                  <span className="eliminated-text"> (Eliminated)</span>
                             )}
                         </div>
             );
@@ -1126,26 +1128,6 @@ export default function GameView({
             End Turn
           </button>
         </div>
-
-        {isMyTurn && !myPlayer?.eliminated && !hasMovedThisTurn && !isGameOver && (
-          <div className="move-options">
-            {isRequestingMoves && moveOptions.length === 0 ? (
-              <button className="game-button movement" disabled>
-                Getting movement options…
-              </button>
-            ) : (
-              moveOptions.map((option) => (
-                <button
-                  key={option}
-                  className="game-button movement"
-                  onClick={() => handleMoveOptionSelect(option)}
-                >
-                  {formatMoveOptionLabel(option) || option}
-                </button>
-              ))
-            )}
-          </div>
-        )}
 
         {showSuggestionForm && (
           <div className="suggestion-form">
@@ -1305,24 +1287,125 @@ export default function GameView({
           </div>
         )}
 
-        {showSuggestionBanner && lastSuggestionResolved && lastSuggestionCard && myPlayer && (
+        {showSuggestionBanner && lastSuggestionResolved && myPlayer && (
           <div className="suggestion-result-banner">
-            {lastSuggestion?.suggester === myPlayer.name ? (
-              // Suggester sees the card privately
+            {lastSuggestionCard ? (
+              // Someone disproved
               <>
-                Your suggestion was disproved by <strong>{lastSuggestion?.disprover}</strong>{' '}
-                with <strong>{lastSuggestionCard}</strong>.
+                {lastSuggestion?.suggester === myPlayer.name ? (
+                  // Suggester sees the card privately
+                  <>
+                    Your suggestion was disproved by <strong>{lastSuggestion?.disprover}</strong>{' '}
+                    with <strong>{lastSuggestionCard}</strong>.
+                  </>
+                ) : lastSuggestion?.disprover === myPlayer.name ? (
+                  // Disprover sees confirmation
+                  <>
+                    You disproved <strong>{lastSuggestion?.suggester}</strong>'s suggestion
+                    with <strong>{lastSuggestionCard}</strong>.
+                  </>
+                ) : (
+                  // Other players see that it was disproved
+                  <>
+                    <strong>{lastSuggestion?.suggester}</strong>'s suggestion was disproved by{' '}
+                    <strong>{lastSuggestion?.disprover}</strong>.
+                  </>
+                )}
               </>
-            ) : lastSuggestion?.disprover === myPlayer.name ? (
-              // Disprover sees confirmation
+            ) : (
+              // No one could disprove
               <>
-                You disproved <strong>{lastSuggestion?.suggester}</strong>'s suggestion
-                with <strong>{lastSuggestionCard}</strong>.
+                {lastSuggestion?.suggester === myPlayer.name ? (
+                  <>
+                    No one could disprove your suggestion.
+                  </>
+                ) : (
+                  <>
+                    No one could disprove{' '}
+                    <strong>{lastSuggestion?.suggester}</strong>'s suggestion.
+                  </>
+                )}
               </>
-            ) : null}
+            )}
           </div>
         )}
+              </div>
             </div>
+
+            {/* Right Side: User Hand only */}
+            <div className="game-sidebar">
+              <div className="player-hands-container">
+                <div className="hand-label">
+                  <strong>Your Hand:</strong>
+                </div>
+                <div className="hand-cards">
+                  {(() => {
+                    const me = players.find(
+                      (p) => p.id === myPlayer?.id,
+                    );
+                    if (!me || !Array.isArray(me.hand) || me.hand.length === 0) {
+                      return <div className="no-cards">No cards in hand</div>;
+                    }
+                    return me.hand.map((card, index) => {
+                      const cardType = SUSPECTS.includes(card)
+                        ? "suspect"
+                        : WEAPONS.includes(card)
+                        ? "weapon"
+                        : ROOMS.includes(card)
+                        ? "room"
+                        : "unknown";
+                      const cardIcon =
+                        cardType === "suspect"
+                          ? "👤"
+                          : cardType === "weapon"
+                          ? "⚔️"
+                          : cardType === "room"
+                          ? "🏠"
+                          : "❓";
+                      return (
+                        <div
+                          key={index}
+                          className={`game-card card-${cardType}`}
+                        >
+                          <div className="card-corner card-corner-top-left">
+                            {cardIcon}
+                          </div>
+                          <div className="card-corner card-corner-bottom-right">
+                            {cardIcon}
+                          </div>
+                          <div className="card-content">
+                            <div className="card-name">{card}</div>
+                            <div className="card-type">{cardType}</div>
+                          </div>
+                        </div>
+                      );
+                    });
+                  })()}
+                </div>
+              </div>
+            </div>
+          </div>
+
+            {/* Movement Options Below Board and Players Section */}
+            {isMyTurn && !myPlayer?.eliminated && !hasMovedThisTurn && !isGameOver && (
+              <div className="move-options">
+                {isRequestingMoves && moveOptions.length === 0 ? (
+                  <button className="game-button movement" disabled>
+                    Getting movement options…
+                  </button>
+                ) : (
+                  moveOptions.map((option) => (
+                    <button
+                      key={option}
+                      className="game-button movement"
+                      onClick={() => handleMoveOptionSelect(option)}
+                    >
+                      {formatMoveOptionLabel(option) || option}
+                    </button>
+                  ))
+                )}
+              </div>
+            )}
 
             <div className="game-messages">
         {renderedMessages.length > 0 ? (
@@ -1334,9 +1417,7 @@ export default function GameView({
         )}
             </div>
 
-        {myPlayer && myPlayer.possible_solution_cards && (
-          <SolutionTracker possibleCards={myPlayer.possible_solution_cards} />
-        )}
+        <ClueScoreSheet />
         </div>
     );
 }

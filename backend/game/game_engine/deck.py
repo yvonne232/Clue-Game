@@ -10,7 +10,7 @@ class Deck:
     def __init__(self):
         """Initialize deck by ensuring all required cards exist and loading them."""
         self._ensure_cards_exist()
-
+        
         # Load cards grouped by type
         self.characters = list(Card.objects.filter(card_type="CHAR"))
         self.weapons = list(Card.objects.filter(card_type="WEAP"))
@@ -33,7 +33,7 @@ class Deck:
             )
 
         self.all_cards = self.characters + self.weapons + self.rooms
-
+        
     def _ensure_cards_exist(self):
         """Ensure all required cards exist in the database."""
         card_data = (
@@ -68,7 +68,7 @@ class Deck:
                 latest_solution.character_id,
                 latest_solution.weapon_id,
                 latest_solution.room_id,
-            }
+                }
             cards_to_deal = [card for card in cards_to_deal if card.id not in excluded]
 
         random.shuffle(cards_to_deal)
