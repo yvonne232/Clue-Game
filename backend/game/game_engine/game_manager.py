@@ -277,6 +277,9 @@ class GameManager:
         intro = f"{entry['name']} suggests {suspect} with {weapon} in {location.name}."
         Notifier.broadcast(intro, room=self.room_name)
         
+        # Clear any previous suggestion result to avoid stale data
+        self.last_suggestion_result = None
+        
         # Call handle_suggestion with new return format (dict) of pending disproof state
         disproof_result = self.suggestion_engine.handle_suggestion(
             entry, suspect, weapon, location.name
@@ -300,6 +303,8 @@ class GameManager:
             self.pending_disproof["disprover_id"] = disprover["player_obj"].id
             self.pending_disproof["disprover_name"] = disprover["name"]
             self.pending_disproof["matching_cards"] = matching_cards
+            
+            print(f"[DISPROOF] Waiting for {disprover['name']} to choose from {matching_cards}")
             
             entry["arrived_via_suggestion"] = True
             self.turn_state["made_suggestion"] = True
@@ -367,6 +372,8 @@ class GameManager:
         # Verify the card is in the disprover's hand
         if card_name not in disprover["hand"]:
             return {"success": False, "error": f"Card '{card_name}' is not in your hand."}
+
+        print(f"[DISPROOF] {disprover['name']} chose {card_name} to disprove")
 
         # Store the revealed card in suggestion result
         suggester_id = self.pending_disproof.get("suggester_id")
