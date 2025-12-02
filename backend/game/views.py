@@ -489,9 +489,9 @@ def start_game(request, lobby_id):
             game_name = f"lobby_{lobby_id}"
             remove_session(game_name)
 
+            # Delete existing game and its related objects (solution will cascade)
             Game.objects.filter(name=game_name).delete()
             Player.objects.filter(game__name=game_name).delete()
-            Solution.objects.all().delete()
             Hallway.objects.all().update(is_occupied=False)
 
             manager = GameManager(game_name=game_name, lobby_players=players)
@@ -612,9 +612,8 @@ class GameResetView(APIView):
                     # Clear occupancy before recreating players
                     Hallway.objects.update(is_occupied=False)
 
-                    # Remove existing game state (cascades to players)
+                    # Remove existing game state (solution will cascade via OneToOneField)
                     Game.objects.filter(name=game_name).delete()
-                    Solution.objects.all().delete()
 
                     manager = GameManager(game_name=game_name)
                 break

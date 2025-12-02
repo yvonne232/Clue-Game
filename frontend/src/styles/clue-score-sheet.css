@@ -61,6 +61,38 @@
   transform: translateY(0);
 }
 
+.score-sheet-help {
+  background: #f0f4f8;
+  border: 1px solid #b0c4d6;
+  border-radius: 4px;
+  padding: 6px 8px;
+  margin-bottom: 8px;
+  font-size: 0.65rem;
+  line-height: 1.4;
+}
+
+.help-section {
+  margin-bottom: 3px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  flex-wrap: wrap;
+}
+
+.help-section:last-child {
+  margin-bottom: 0;
+}
+
+.help-section strong {
+  color: #2c3e50;
+  font-weight: 600;
+}
+
+.help-badge {
+  margin: 0 2px;
+  display: inline-block;
+}
+
 .score-sheet-content {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
@@ -135,6 +167,71 @@
   justify-content: center;
   border-left: 1px solid #e0e0e0;
   background: #fafafa;
+  cursor: pointer;
+  user-select: none;
+  transition: background-color 0.15s;
+}
+
+.score-sheet-cell.mark-cell:hover {
+  background: #f0f0f0;
+}
+
+.score-sheet-cell.mark-cell.checked {
+  background: #d4edda;
+}
+
+.score-sheet-cell.mark-cell.maybe {
+  background: #fff3cd;
+}
+
+.mark-content {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  flex-wrap: wrap;
+}
+
+.mark-symbol {
+  font-size: 1rem;
+  font-weight: bold;
+  display: inline-block;
+  line-height: 1;
+}
+
+.mark-symbol.check {
+  color: #27ae60;
+}
+
+.mark-symbol.maybe {
+  color: #f39c12;
+  font-size: 1.2rem;
+}
+
+.revealed-by-indicator {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: #3498db;
+  color: white;
+  display: inline-block;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.revealed-to-indicator {
+  font-size: 0.55rem;
+  font-weight: 700;
+  padding: 1px 3px;
+  border-radius: 2px;
+  background: #e67e22;
+  color: white;
+  display: inline-block;
+  line-height: 1;
+  letter-spacing: 0.2px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
 }
 
 .score-checkbox {

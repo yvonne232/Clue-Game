@@ -1417,7 +1417,7 @@ export default function GameView({
         )}
             </div>
 
-        <ClueScoreSheet />
+        <ClueScoreSheet myPlayer={myPlayer} gameId={roomName} />
         </div>
     );
 }

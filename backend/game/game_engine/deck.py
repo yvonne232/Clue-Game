@@ -54,21 +54,23 @@ class Deck:
         weapon = random.choice(self.weapons)
         room = random.choice(self.rooms)
 
-        Game.objects.update(solution=None)
-        Solution.objects.all().delete()
         return Solution.objects.create(character=char, weapon=weapon, room=room)
 
-    def deal(self, num_players):
-        """Deal remaining (non-solution) cards evenly among players."""
-        latest_solution = Solution.objects.order_by("-created_at").first()
-
+    def deal(self, num_players, solution):
+        """
+        Deal remaining (non-solution) cards evenly among players.
+        
+        Args:
+            num_players: Number of players to deal to
+            solution: Solution object containing the cards to exclude from dealing
+        """
         cards_to_deal = self.all_cards.copy()
-        if latest_solution:
+        if solution:
             excluded = {
-                latest_solution.character_id,
-                latest_solution.weapon_id,
-                latest_solution.room_id,
-                }
+                solution.character_id,
+                solution.weapon_id,
+                solution.room_id,
+            }
             cards_to_deal = [card for card in cards_to_deal if card.id not in excluded]
 
         random.shuffle(cards_to_deal)

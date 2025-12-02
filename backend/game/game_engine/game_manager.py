@@ -113,6 +113,8 @@ class GameManager:
                     "arrived_via_suggestion": entry.get("arrived_via_suggestion", False),
                     "hand": sorted(entry.get("hand", [])),  # Original cards dealt to player
                     "known_cards": sorted(entry.get("known_cards", [])),  # All cards known (hand + revealed)
+                    "revealed_by": entry.get("revealed_by", {}),  # Dict mapping card_name -> disprover_name
+                    "revealed_to": entry.get("revealed_to", {}),  # Dict mapping card_name -> list of player names
                     "possible_solution_cards": self._get_possible_solution_cards(entry),  # Cards that could be in solution
                 }
                 for entry in self.players
@@ -381,6 +383,18 @@ class GameManager:
         suggester = self.get_player_entry(suggester_id)
         if suggester:
             suggester["known_cards"].add(card_name)
+            # Track who revealed this card to the suggester
+            if "revealed_by" not in suggester:
+                suggester["revealed_by"] = {}
+            suggester["revealed_by"][card_name] = disprover["name"]
+
+        # Track on the disprover's side that they revealed this card to the suggester
+        if "revealed_to" not in disprover:
+            disprover["revealed_to"] = {}
+        if card_name not in disprover["revealed_to"]:
+            disprover["revealed_to"][card_name] = []
+        if suggester and suggester["name"] not in disprover["revealed_to"][card_name]:
+            disprover["revealed_to"][card_name].append(suggester["name"])
 
         # Broadcast to all players that suggestion was disproved
         Notifier.broadcast(
@@ -678,15 +692,19 @@ class GameManager:
                     "hand": [],
                     "eliminated": False,
                     "known_cards": set(),
+                    "revealed_by": {},  # Dict mapping card_name -> disprover_name
+                    "revealed_to": {},  # Dict mapping card_name -> list of player names this card was revealed to
                     "arrived_via_suggestion": False,
                 }
             )
 
     def _deal_cards(self):
-        hands = self.deck.deal(len(self.players))
+        hands = self.deck.deal(len(self.players), self.game.solution)
         for index, entry in enumerate(self.players):
             entry["hand"] = hands[index]
             entry["known_cards"] = set(hands[index])
+            entry["revealed_by"] = {}  # Reset revealed_by when dealing cards
+            entry["revealed_to"] = {}  # Reset revealed_to when dealing cards
 
     def _initialize_starting_positions(self):
         # If starting positions already exist, assume they are correct
