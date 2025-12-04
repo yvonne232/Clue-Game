@@ -1,4 +1,4 @@
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useCallback } from "react";
 
 export default function useWebSocket(roomName = "default") {
   const [messages, setMessages] = useState([]);
@@ -59,7 +59,7 @@ export default function useWebSocket(roomName = "default") {
     };
   }, [roomName]);
 
-  const sendMessage = (msg) => {
+  const sendMessage = useCallback((msg) => {
     if (socketRef.current?.readyState === WebSocket.OPEN) {
       // If msg is already a string, parse it first to ensure it's an object
       const msgObj = typeof msg === 'string' ? JSON.parse(msg) : msg;
@@ -68,9 +68,9 @@ export default function useWebSocket(roomName = "default") {
     } else {
       console.warn('WebSocket is not connected, cannot send message');
     }
-  };
+  }, []);
 
-  const clearMessages = () => setMessages([]);
+  const clearMessages = useCallback(() => setMessages([]), []);
 
   return { messages, sendMessage, clearMessages };
 }
