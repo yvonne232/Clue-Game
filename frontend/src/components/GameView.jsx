@@ -659,7 +659,8 @@ export default function GameView({
         card_name: card,
       });
       setShowDisproveModal(false);
-      setDisproofInfo(null);
+      // Don't clear disproofInfo here - let it be cleared when disproof_result is received
+      // This ensures all players keep actions blocked until the disproof is fully processed
     },
     [myPlayer, sendMessage],
   );
