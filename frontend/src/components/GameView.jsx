@@ -224,6 +224,7 @@ export default function GameView({
     const [myPlayer, setMyPlayer] = useState(null);
   const [moveOptions, setMoveOptions] = useState([]);
   const [isRequestingMoves, setIsRequestingMoves] = useState(false);
+  const [hasNoMoves, setHasNoMoves] = useState(false);
   const [isRestarting, setIsRestarting] = useState(false);
   const [suggestSuspect, setSuggestSuspect] = useState(SUSPECTS[0]);
   const [suggestWeapon, setSuggestWeapon] = useState(WEAPONS[0]);
@@ -446,6 +447,12 @@ export default function GameView({
         console.log('Setting move options:', options);
         setMoveOptions(options);
         setIsRequestingMoves(false);
+        
+        // If no moves available, set hasNoMoves flag
+        if (options.length === 0) {
+          console.log('Player has no available moves');
+          setHasNoMoves(true);
+        }
       } else {
         console.warn('Move options received but player ID/name mismatch:', {
           receivedPlayerId: playerId,
@@ -524,8 +531,17 @@ export default function GameView({
     if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated || isDisproofInProgress) {
       setIsRequestingMoves(false);
       setMoveOptions([]);
+      setHasNoMoves(false);
+    } else if (isMyTurn && !hasMovedThisTurn && !isRequestingMoves && moveOptions.length === 0 && !hasNoMoves) {
+      // Auto-request movement when it's player's turn and they haven't moved yet
+      console.log('Auto-requesting movement options for player:', myPlayer?.id, myPlayer?.name);
+      setIsRequestingMoves(true);
+      sendMessage({
+        type: "make_move",
+        player_id: myPlayer.id,
+      });
     }
-  }, [isMyTurn, hasMovedThisTurn, myPlayer, isDisproofInProgress]);
+  }, [isMyTurn, hasMovedThisTurn, myPlayer, isDisproofInProgress, isRequestingMoves, moveOptions.length, hasNoMoves, sendMessage]);
 
   // Hide suggestion banner when turn changes
   useEffect(() => {
@@ -556,7 +572,7 @@ export default function GameView({
   }, [messages, onReturnToCharacterSelect]);
 
   const handleMakeMove = useCallback(() => {
-    if (!isMyTurn || myPlayer?.eliminated || isGameOver) {
+    if (!isMyTurn || myPlayer?.eliminated || isGameOver || hasNoMoves) {
       return;
     }
     console.log('Requesting movement options for player:', myPlayer.id, myPlayer.name);
@@ -567,7 +583,7 @@ export default function GameView({
       type: "make_move",
       player_id: myPlayer.id,
     });
-  }, [isGameOver, isMyTurn, myPlayer, sendMessage]);
+  }, [isGameOver, isMyTurn, myPlayer, sendMessage, hasNoMoves]);
 
   const handleMoveOptionSelect = useCallback(
     (destination) => {
@@ -1066,7 +1082,8 @@ export default function GameView({
               hasMovedThisTurn ||
               isRequestingMoves ||
               isGameOver ||
-              isDisproofInProgress
+              isDisproofInProgress ||
+              hasNoMoves
             }
             title={
               !isMyTurn
@@ -1075,6 +1092,8 @@ export default function GameView({
                   ? "You have been eliminated"
                   : hasMovedThisTurn
                     ? "You have already moved this turn"
+                  : hasNoMoves
+                    ? "You have no available moves"
                   : isDisproofInProgress
                     ? "Waiting for suggestion to be disproved"
                   : isGameOver
@@ -1087,7 +1106,16 @@ export default function GameView({
                 <button 
                     onClick={handleSuggestion} 
                     className="game-button"
-            disabled={!isMyTurn || !isInRoom || hasSuggestedThisTurn || !canMakeSuggestion || myPlayer?.eliminated || isGameOver || isDisproofInProgress}
+            disabled={
+              !isMyTurn || 
+              !isInRoom || 
+              hasSuggestedThisTurn || 
+              !canMakeSuggestion || 
+              myPlayer?.eliminated || 
+              isGameOver || 
+              isDisproofInProgress ||
+              (hasNoMoves && !myPlayer?.arrived_via_suggestion)
+            }
             title={
               !isMyTurn
                 ? "Wait for your turn"
@@ -1097,6 +1125,8 @@ export default function GameView({
                     ? "You have already made a suggestion this turn"
                   : !canMakeSuggestion
                     ? "You must confirm your movement before making a suggestion"
+                  : (hasNoMoves && !myPlayer?.arrived_via_suggestion)
+                    ? "You cannot make a suggestion when unable to move (unless pulled by a previous suggestion)"
                   : isDisproofInProgress
                     ? "Waiting for suggestion to be disproved"
                   : myPlayer?.eliminated
