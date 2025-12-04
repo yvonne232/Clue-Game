@@ -392,23 +392,19 @@ export default function GameView({
       setPlayers(incomingPlayers);
       setCurrentPlayer(normalizeCurrentPlayer(latest.game_state.current_player));
       
-      // Clear disproof state if the last suggestion result shows a card was revealed
-      // This means the disproof is complete
+      // Only clear disproof state if the suggestion is fully resolved
+      // Don't clear if suggestion exists but has no resolution yet (pending disproof)
       if (disproofInfo && latest.game_state.last_suggestion) {
         const lastSuggestion = latest.game_state.last_suggestion;
+        // Check if this is a RESOLVED suggestion (has card or explicitly no one could disprove)
         if (lastSuggestion.card && lastSuggestion.disprover) {
           // Disproof is complete - clear the state
           console.log("Disproof complete based on game state, clearing disproofInfo");
           setDisproofInfo(null);
           setPendingStatusMessage(null);
           setShowDisproveModal(false);
-        } else if (!lastSuggestion.card && !lastSuggestion.disprover && lastSuggestion.suggester) {
-          // No one could disprove - clear the state
-          console.log("No one could disprove, clearing disproofInfo");
-          setDisproofInfo(null);
-          setPendingStatusMessage(null);
-          setShowDisproveModal(false);
         }
+        // Note: Don't clear for pending suggestions - wait for disproof_result or suggestion_not_disproved
       }
       return;
     }
@@ -440,6 +436,12 @@ export default function GameView({
       });
 
       if (matchesId || matchesName) {
+        // Don't process move options if a disproof is in progress
+        if (disproofInfo) {
+          console.log('Move options received but disproof is in progress, ignoring');
+          setIsRequestingMoves(false);
+          return;
+        }
         const options = latest.options ?? [];
         console.log('Setting move options:', options);
         setMoveOptions(options);
@@ -464,6 +466,10 @@ export default function GameView({
         suggester_name: latest.suggester_name,
         matching_cards: latest.matching_cards,
       });
+      
+      // Clear any pending move options to prevent movement during disproof
+      setMoveOptions([]);
+      setIsRequestingMoves(false);
       
       // Show pending status for all players
       setPendingStatusMessage(`Waiting for ${latest.disprover_name} to choose a card to disprove...`);
@@ -515,11 +521,11 @@ export default function GameView({
   }, [messages, myPlayer, disproofInfo, isRequestingMoves, clearMessages, roomName]);
 
   useEffect(() => {
-    if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated) {
+    if (!isMyTurn || hasMovedThisTurn || myPlayer?.eliminated || isDisproofInProgress) {
       setIsRequestingMoves(false);
       setMoveOptions([]);
     }
-  }, [isMyTurn, hasMovedThisTurn, myPlayer]);
+  }, [isMyTurn, hasMovedThisTurn, myPlayer, isDisproofInProgress]);
 
   // Hide suggestion banner when turn changes
   useEffect(() => {
