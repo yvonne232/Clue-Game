@@ -24,9 +24,9 @@ class SuggestionEngine:
 
         suggester_name = suggesting_player["name"]
 
-        # Move the suspect to the suggested room
+        # Move the suspect to the suggested room (only if not eliminated)
         suspect_player = next((p for p in self.players if p["name"] == suspect), None)
-        if suspect_player and suspect_player is not suggesting_player:
+        if suspect_player and suspect_player is not suggesting_player and not suspect_player.get("eliminated", False):
             try:
                 new_room = Room.objects.get(name=room_name)
             except Room.DoesNotExist:

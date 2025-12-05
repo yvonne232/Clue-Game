@@ -51,6 +51,10 @@ class GameManager:
         self._initialize_starting_positions()
 
         # Prepare the deck (creates cards if they do not exist) and mystery solution
+        # Delete any existing solution for this game before creating a new one
+        if self.game.solution:
+            self.game.solution.delete()
+        
         self.deck = Deck()
         solution_obj = self.deck.create_solution()
         self.solution = {
