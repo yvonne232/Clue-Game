@@ -1,76 +1,100 @@
-# ClueLess_MysteryGang_EN.605.601.81.FA25
-GitHub for EN.605.601.81.FA25 - Mystery Gang
+# ClueLess — Mystery Gang
 
-## Skeletal Backend Setup
+**Final project for EN.605.601 Foundations of Software Engineering**
 
-Django project structure configured to support Django Channels and ASGI for Websocket communication
+A web version of the classic board game **Clue**. Players join a lobby, pick a character (each with a fixed starting position on the board), take turns moving, making suggestions, and—when ready—accusations. All game events are broadcast in real time over **WebSockets** so everyone stays in sync.
 
+---
 
-### Current Progress
+## Project Description
 
-So far, this increment includes:
-- Created a Python virtual environment (`.venv`)
-- Installed **Django**, **Channels**, and **Daphne**
-- Started a Django project (`backend`) and app (`realtime`)
-- Modified:
-  - `backend/settings.py` → enabled `channels` and added an in-memory channel layer
-  - `backend/asgi.py` → made the backend ASGI- and WebSocket-capable
+ClueLess is a multiplayer Clue implementation built for the browser. It uses a **React** frontend and a **Django Channels** backend with **Daphne** (ASGI). Communication between clients and the server is done via **WebSockets**, so moves, suggestions, accusations, and disproofs are pushed to all players as they happen.
 
-Frontend:
-- React frontend
-- Modified:
-  - `frontend/src/App.jsx` → enables the communication between backend and frontend via websockets, also defines webpage contents
+**Game flow:** Lobby → **Select character** (static starting positions) → **Move** → **Suggestion** (and disproof) → **Accusation** → game state and feed updates are **broadcast** to all connected players.
 
+---
 
-## Backend Setup Instructions
+## How the Game Plays
 
-### 1. Create and activate a virtual environment
+- **Players:** The game supports **3–6 players**. Once there are more than 3 players in the lobby and everyone has chosen a character, the host can start the game (maximum 6 players at a time).
+
+- **Goal:** Solve the mystery by figuring out **which character used which weapon in which room**. The solution is one suspect, one weapon, and one room; players use suggestions and their scoresheet to narrow it down, then make an accusation when they’re ready.
+
+- **Movement:** On your turn you move your character along the board. You can move between **rooms** and **hallways**. Each hallway holds at most one player, so you can’t move into an occupied hallway. Characters have **fixed starting positions** (e.g. Miss Scarlet, Colonel Mustard, etc. each start in a specific hallway).
+
+- **Suggestion:** When you end your move in a **room**, you must make a **suggestion**: you name a suspect, a weapon, and the room you’re in. The suggested suspect (if in the game and not eliminated) is **moved into that room**. The game then looks for someone who can **disprove** the suggestion.
+
+- **Disproof:** After a suggestion, play proceeds in turn order. The **first player after you** who has at least one of the suggested cards (suspect, weapon, or room) must **disprove** by choosing one of those cards to reveal. That disproves the suggestion and gives you (and others) a clue about what’s *not* in the solution. If no one can disprove, the suggestion stands without a disproof.
+
+- **Accusation:** When it’s your turn, you may make an **accusation** instead of (or in addition to) moving/suggesting: you state the exact suspect, weapon, and room you believe are the solution.
+  - **Correct accusation** → You win the game.
+  - **Wrong accusation** → You are **eliminated** and take no further turns. If only one player remains (everyone else eliminated), that player wins by **last player standing**.
+
+- **Winning:** You win by making the **correct accusation** (right suspect, weapon, and room), or by being the **last player left** after everyone else has been eliminated by a wrong accusation.
+
+---
+
+## Screenshots
+
+| Lobby | Character selection |
+|-------|---------------------|
+| ![Lobby](docs/screenshots/01-lobby.png) | ![Character selection](docs/screenshots/02-characterSelection.png) |
+
+| Game board | Suggestion, accusation & scoresheet |
+|------------|-------------------------------------|
+| ![ClueLess board](docs/screenshots/03-ClueLess%20Board.png) | ![Suggestion, accusation and scoresheet](docs/screenshots/04-Suggestion,%20Accusation%20and%20Scoresheet.png) |
+
+---
+
+## Demo Videos
+
+Submitted demos are in `docs/demo-videos/`:
+
+- **Minimal Increment** — [Minimal Increment_ The Mystery Gangv1.mp4](docs/demo-videos/Minimal%20Increment_%20The%20Mystery%20Gangv1.mp4)
+- **Target Increment** — [Target Increment The Mystery Gang.mp4](docs/demo-videos/Target%20Increment%20The%20Mystery%20Gang.mp4)
+
+---
+
+## Tech Stack
+
+- **Frontend:** React (Vite), WebSocket client
+- **Backend:** Django, Django Channels, Daphne (ASGI)
+- **Real-time:** WebSockets for lobby, game state, moves, suggestions, accusations, and broadcast updates
+
+---
+
+## How to Run
+
+### 1. Backend (from project root)
 
 ```bash
+# Create and activate a virtual environment (one-time)
 python -m venv .venv
-# macOS/Linux
-source .venv/bin/activate
-# Windows PowerShell
-.venv\Scripts\Activate.ps1
-```
+source .venv/bin/activate   # macOS/Linux
+# .venv\Scripts\Activate.ps1   # Windows PowerShell
 
-### 2. Install Dependencies
-
-```bash
+# Install dependencies
 pip install -r requirements.txt
-```
 
-### 3. Apply database migrations
-Propagates changes made to models into database schema
-Source: https://www.geeksforgeeks.org/python/django-manage-py-migrate-command-python/
-```bash
+# Apply migrations
 python backend/manage.py migrate
+
+# Start the ASGI server (Django + Channels on port 8000)
+cd backend && daphne backend.asgi:application
 ```
 
-### 4. Run ASGI server
-Run this command within the backend/ folder
-```bash
-daphne backend.asgi:application
-```
-Starts the Django + Channels server on port 8000
-
-## Backend Setup Instructions
-
-### 1. Go the the frontend (from the home directory)
+### 2. Frontend (in a separate terminal)
 
 ```bash
-cd frontend/
-```
-
-### 2. Install npm (one-time)
-
-```bash
-npm install
-```
-You may also need to update Node.js to its latest version before proceeding
-
-### 3. Start the server
-
-```bash
+cd frontend
+npm install   # one-time
 npm run dev
 ```
+
+Open the URL shown by Vite (e.g. `http://localhost:5173`) and ensure the backend is running so WebSocket connections work.
+
+---
+
+## Repository
+
+GitHub for **EN.605.601.81.FA25** — Mystery Gang.
