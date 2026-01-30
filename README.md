@@ -36,13 +36,21 @@ ClueLess is a multiplayer Clue implementation built for the browser. It uses a *
 
 ## Screenshots
 
-| Lobby | Character selection |
-|-------|---------------------|
-| ![Lobby](docs/screenshots/01-lobby.png) | ![Character selection](docs/screenshots/02-characterSelection.png) |
+**Lobby**
 
-| Game board | Suggestion, accusation & scoresheet |
-|------------|-------------------------------------|
-| ![ClueLess board](docs/screenshots/03-ClueLess%20Board.png) | ![Suggestion, accusation and scoresheet](docs/screenshots/04-Suggestion,%20Accusation%20and%20Scoresheet.png) |
+![Lobby](docs/screenshots/01-lobby.png)
+
+**Character selection**
+
+![Character selection](docs/screenshots/02-characterSelection.png)
+
+**Game board**
+
+![ClueLess board](docs/screenshots/03-ClueLess%20Board.png)
+
+**Suggestion, accusation & scoresheet**
+
+![Suggestion, accusation and scoresheet](docs/screenshots/04-Suggestion,%20Accusation%20and%20Scoresheet.png)
 
 ---
 
