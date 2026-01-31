@@ -54,15 +54,6 @@ ClueLess is a multiplayer Clue implementation built for the browser. It uses a *
 
 ---
 
-## Demo Videos
-
-Submitted demos are in `docs/demo-videos/`:
-
-- **Minimal Increment** — [Minimal Increment_ The Mystery Gangv1.mp4](docs/demo-videos/Minimal%20Increment_%20The%20Mystery%20Gangv1.mp4)
-- **Target Increment** — [Target Increment The Mystery Gang.mp4](docs/demo-videos/Target%20Increment%20The%20Mystery%20Gang.mp4)
-
----
-
 ## Tech Stack
 
 - **Frontend:** React (Vite), WebSocket client
