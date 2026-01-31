@@ -2,7 +2,7 @@
 
 **Final project for EN.605.601 Foundations of Software Engineering**
 
-A web version of the classic board game **Clue**. Players join a lobby, pick a character (each with a fixed starting position on the board), take turns moving, making suggestions, and—when ready—accusations. All game events are broadcast in real time over **WebSockets** so everyone stays in sync.
+A web version of the classic board game **Clue**. Players join a lobby, pick a character (each with a fixed starting position on the board), take turns moving, making suggestions, and—when ready—accusations. All game events are broadcast in real time over **WebSockets** so everyone stays in sync. It is a final project for EN.605.601 Foundations of Software Engineering for MS in Computer Science at JHU.
 
 ---
 
